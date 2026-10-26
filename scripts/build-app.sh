@@ -22,6 +22,7 @@ BIN=$(swift build -c release --show-bin-path)
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Helpers" "$APP/Contents/Resources"
 cp "$BIN/SwitchboardApp" "$APP/Contents/MacOS/Switchboard"
+cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 # Helpers live in Contents/Helpers: "switchboard" and "Switchboard" would be the same file in
 # Contents/MacOS on a case-insensitive volume.
 cp "$BIN/switchboard" "$APP/Contents/Helpers/switchboard"
@@ -37,6 +38,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundleIdentifier</key><string>app.switchboard.menubar</string>
     <key>CFBundleExecutable</key><string>Switchboard</string>
     <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundleShortVersionString</key><string>${VERSION}</string>
     <key>CFBundleVersion</key><string>${VERSION}</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
