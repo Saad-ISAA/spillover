@@ -47,7 +47,15 @@ public struct ShellShim {
     public func rcBlock() -> String {
         let shims = env.paths.shimsDir.path
         let home = env.home.path
-        let shown = shims.hasPrefix(home + "/") ? "$HOME" + shims.dropFirst(home.count) : shims
+        let inHome = shims.hasPrefix(home + "/")
+        let tail = inHome ? String(shims.dropFirst(home.count)) : shims
+        // Escape what is special inside double quotes so an unusual folder name stays literal.
+        var escaped = ""
+        for ch in tail {
+            if "\"$`\\".contains(ch) { escaped.append("\\") }
+            escaped.append(ch)
+        }
+        let shown = inHome ? "$HOME" + escaped : escaped
         return """
             \(Self.beginMarker)
             export PATH="\(shown):$PATH"
@@ -64,8 +72,27 @@ public struct ShellShim {
 /// Idempotent marker-block editing for shell startup files. Everything outside the markers is left
 /// byte-for-byte as it was.
 public enum RCFile {
+    public struct UnbalancedMarkers: Error, LocalizedError {
+        public let path: String
+        public var errorDescription: String? {
+            "\(path) has an incomplete or repeated Switchboard block. Remove the lines between \(ShellShim.beginMarker) and \(ShellShim.endMarker) by hand, then try again."
+        }
+    }
+
+    /// Exactly zero or one complete block is safe to edit; anything else could swallow user lines.
+    static func markersAreBalanced(_ text: String) -> Bool {
+        let begins = text.components(separatedBy: ShellShim.beginMarker).count - 1
+        let ends = text.components(separatedBy: ShellShim.endMarker).count - 1
+        guard begins == ends, begins <= 1 else { return false }
+        if begins == 1, let b = text.range(of: ShellShim.beginMarker), let e = text.range(of: ShellShim.endMarker) {
+            return b.lowerBound < e.lowerBound
+        }
+        return true
+    }
+
     public static func install(block: String, at url: URL) throws {
         let existing = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        guard markersAreBalanced(existing) else { throw UnbalancedMarkers(path: url.path) }
         let updated = inserting(block: block, into: existing)
         guard updated != existing else { return }
         try SafeFS.writeAtomic(Data(updated.utf8), to: url, mode: nil)
@@ -73,6 +100,7 @@ public enum RCFile {
 
     public static func uninstall(at url: URL) throws {
         guard let existing = try? String(contentsOf: url, encoding: .utf8) else { return }
+        guard markersAreBalanced(existing) else { throw UnbalancedMarkers(path: url.path) }
         let updated = removingBlock(from: existing)
         guard updated != existing else { return }
         try SafeFS.writeAtomic(Data(updated.utf8), to: url, mode: nil)

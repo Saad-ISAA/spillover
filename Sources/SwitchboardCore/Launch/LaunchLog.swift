@@ -16,7 +16,7 @@ public struct LaunchLog {
         // The folder path is not a credential and long hyphenated folder names would trip the
         // long-run rule, so only the other fields go through the scrubber. Newlines are removed so
         // a crafted folder name cannot forge extra log lines.
-        let safeCwd = cwd.replacingOccurrences(of: "\n", with: "\\n").replacingOccurrences(of: "\r", with: "\\r")
+        let safeCwd = Self.escapeControlCharacters(cwd)
         let line = Redaction.scrub("\(stamp) mode=\(mode.rawValue) profile=\(profile) result=\(outcome)")
             + " cwd=\(safeCwd)\n"
         let paths = env.paths
@@ -37,6 +37,20 @@ public struct LaunchLog {
         } catch {
             // Logging is best effort and must never block a launch.
         }
+    }
+
+    /// Newlines and other control characters (including terminal escape sequences) become
+    /// visible `\u{..}` text, so a crafted folder name cannot forge lines or style a terminal.
+    static func escapeControlCharacters(_ s: String) -> String {
+        var out = ""
+        for scalar in s.unicodeScalars {
+            if scalar.value < 0x20 || scalar.value == 0x7F || (0x80...0x9F).contains(scalar.value) {
+                out += "\\u{\(String(scalar.value, radix: 16))}"
+            } else {
+                out.unicodeScalars.append(scalar)
+            }
+        }
+        return out
     }
 
     /// Most recent entries, newest last.

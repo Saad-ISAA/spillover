@@ -116,6 +116,31 @@ controls:
     tests:
       - SessionScannerTests.testParseKeepsOnlyTwoVariables
 
+  - id: SB-SEC-17
+    title: profiles.json and the Switchboard folder get the same trust checks as routes.json
+    status: enforced
+    owner: Sources/SwitchboardCore/Security/SafeFS.swift (trustProblem)
+    tests:
+      - RegressionTests.testWritableProfilesFileRefusesRoutedLaunch
+      - RegressionTests.testWritableRootRefusesEvenWithoutRoutes
+
+  - id: SB-SEC-18
+    title: Registry and installer writes never clobber concurrent changes or symlinked files
+    status: enforced
+    owner: Sources/SwitchboardCore/Security/SafeFS.swift (withLock, writeAtomic)
+    tests:
+      - RegressionTests.testWritesFollowSymlinks
+      - RegressionTests.testEnsureDirLeavesExistingFoldersAlone
+
+  - id: SB-SEC-19
+    title: Uninstall can always restore a wrapper that existed before Switchboard
+    status: enforced
+    owner: Sources/SwitchboardCore/Integrations/VSCodeInstaller.swift
+    tests:
+      - RegressionTests.testFailedUninstallKeepsRecord
+      - RegressionTests.testAlreadyInstalledWithoutManifestDoesNotRecordItself
+      - RegressionTests.testCorruptManifestIsAnError
+
   - id: SB-SEC-14
     title: Tests run automatically before every release
     status: absent

@@ -36,10 +36,11 @@ final class StatuslineCaptureTests: XCTestCase {
         let box = try Sandbox()
         let work = try ProfileStore(env: box.env).create(displayName: "work")
         let capture = StatuslineCapture(env: box.env, runner: FakeRunner())
-        XCTAssertEqual(capture.activeProfileID(processEnv: ["SWITCHBOARD_PROFILE": "work"]), "work")
-        XCTAssertEqual(capture.activeProfileID(processEnv: ["SWITCHBOARD_PROFILE": "ghost"]), "default")
         XCTAssertEqual(capture.activeProfileID(processEnv: ["CLAUDE_CONFIG_DIR": work.configDir! + "/"]), "work")
         XCTAssertEqual(capture.activeProfileID(processEnv: [:]), "default")
+        // An inherited marker without the matching directory does not decide the account.
+        XCTAssertEqual(capture.activeProfileID(processEnv: ["SWITCHBOARD_PROFILE": "work"]), "default")
+        XCTAssertNil(capture.activeProfileID(processEnv: ["CLAUDE_CONFIG_DIR": "/not/a/profile"]))
     }
 
     func testHandleStoresSnapshotAndChainsOriginalCommand() throws {
@@ -54,7 +55,7 @@ final class StatuslineCaptureTests: XCTestCase {
         let runner = FakeRunner()
         runner.handler = { _, _ in CommandResult(status: 0, stdout: "their line\n") }
         let out = StatuslineCapture(env: box.env, runner: runner)
-            .handle(input: Data(sample.utf8), processEnv: ["SWITCHBOARD_PROFILE": "work"])
+            .handle(input: Data(sample.utf8), processEnv: ["SWITCHBOARD_PROFILE": "work", "CLAUDE_CONFIG_DIR": work.configDir!])
         XCTAssertEqual(out, "their line")
         XCTAssertEqual(runner.calls.first?.args, ["-c", "my-line"])
         XCTAssertEqual(runner.calls.first?.stdin, Data(sample.utf8))

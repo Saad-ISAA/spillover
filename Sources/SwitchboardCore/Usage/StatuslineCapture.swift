@@ -38,31 +38,28 @@ public struct StatuslineCapture {
         return UsageSnapshot(profileId: profileId, capturedAt: now, windows: windows, model: model)
     }
 
-    /// Which profile this Claude process belongs to: the launcher's marker first, then the config
-    /// directory, else Default.
-    public func activeProfileID(processEnv: [String: String]) -> String {
+    /// Which profile this Claude process is really running on, decided by its config directory
+    /// (the launcher's SWITCHBOARD_PROFILE marker can be inherited by unrouted launches, so it is
+    /// not trusted on its own). Nil when the directory belongs to no known profile.
+    public func activeProfileID(processEnv: [String: String]) -> String? {
         let store = ProfileStore(env: env)
         let profiles = (try? store.all()) ?? [Profile.builtInDefault()]
-        if let marked = processEnv[ProfileEnvironment.profileKey], profiles.contains(where: { $0.id == marked }) {
-            return marked
+        guard let dir = processEnv[ProfileEnvironment.configDirKey], !dir.isEmpty else {
+            return Profile.defaultID
         }
-        if let dir = processEnv[ProfileEnvironment.configDirKey],
-            let key = PathNormalizer.normalize(dir, caseInsensitive: env.caseInsensitivePaths)?.key
-        {
-            for p in profiles {
-                if let pd = p.configDir,
-                    PathNormalizer.normalize(pd, caseInsensitive: env.caseInsensitivePaths)?.key == key
-                {
-                    return p.id
-                }
-            }
-        }
-        return Profile.defaultID
+        let key = PathNormalizer.normalize(dir, caseInsensitive: env.caseInsensitivePaths)?.key
+        return profiles.first { p in
+            guard let pd = p.configDir else { return false }
+            return PathNormalizer.normalize(pd, caseInsensitive: env.caseInsensitivePaths)?.key == key
+        }?.id
     }
 
     /// Full statusline run: capture, then produce the line to print.
     public func handle(input: Data, processEnv: [String: String]) -> String {
-        let profileId = activeProfileID(processEnv: processEnv)
+        guard let profileId = activeProfileID(processEnv: processEnv) else {
+            // Unknown account: record nothing rather than attribute usage to the wrong profile.
+            return "Claude"
+        }
         let snapshot = Self.parse(input, profileId: profileId)
         if let snapshot, !snapshot.windows.isEmpty {
             try? UsageStore(env: env).save(snapshot)

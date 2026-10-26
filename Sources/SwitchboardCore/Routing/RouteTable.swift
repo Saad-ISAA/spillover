@@ -24,9 +24,14 @@ public struct RouteTable: Sendable {
 
     private let entries: [Entry]
 
+    /// Route folders are normalised again here, so a hand-edited or legacy `routes.json` entry
+    /// ("/work/", "/a/../work", decomposed Unicode) still matches instead of silently falling back.
     public init(routes: [Route], caseInsensitive: Bool) {
         entries = routes.map { r in
-            Entry(key: caseInsensitive ? r.folder.lowercased() : r.folder, route: r)
+            let key =
+                PathNormalizer.normalize(r.folder, caseInsensitive: caseInsensitive)?.key
+                ?? (caseInsensitive ? r.folder.lowercased() : r.folder)
+            return Entry(key: key, route: r)
         }
     }
 

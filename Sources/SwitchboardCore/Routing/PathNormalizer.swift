@@ -22,36 +22,38 @@ public enum PathNormalizer {
         }
         guard path.hasPrefix("/") else { return nil }
 
-        // 1. Lexical clean-up: drop empty and "." components, apply "..".
-        var comps: [String] = []
-        for part in path.split(separator: "/", omittingEmptySubsequences: true) {
-            if part == "." { continue }
-            if part == ".." {
-                if !comps.isEmpty { comps.removeLast() }
-                continue
-            }
-            comps.append(String(part))
-        }
+        // Components without empty and "." parts. ".." is kept here: it must be applied AFTER
+        // symlinks are resolved (physically, like the kernel), not lexically.
+        let comps = path.split(separator: "/", omittingEmptySubsequences: true)
+            .map(String.init)
+            .filter { $0 != "." }
 
-        // 2. Resolve symlinks on the longest prefix that exists; keep the rest verbatim.
-        var resolvedPrefix = ""
+        // Resolve the longest prefix that exists. realpath applies "..", symlinks and case
+        // physically for that prefix.
+        var resolved: [String] = []
         var restStart = 0
         var k = comps.count
         while k >= 0 {
             let candidate = "/" + comps[0..<k].joined(separator: "/")
             if let real = realpathString(candidate) {
-                resolvedPrefix = real == "/" ? "" : real
+                resolved = real.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
                 restStart = k
                 break
             }
             k -= 1
         }
-        let rest = comps[restStart...].joined(separator: "/")
-        var combined = resolvedPrefix
-        if !rest.isEmpty { combined += "/" + rest }
-        if combined.isEmpty { combined = "/" }
 
-        // 3. Unicode normalisation (macOS can hand back decomposed names).
+        // The tail does not exist, so there are no symlinks left in it: apply it lexically.
+        for part in comps[restStart...] {
+            if part == ".." {
+                if !resolved.isEmpty { resolved.removeLast() }
+            } else {
+                resolved.append(part)
+            }
+        }
+
+        let combined = "/" + resolved.joined(separator: "/")
+        // Unicode normalisation (macOS can hand back decomposed names).
         let display = combined.precomposedStringWithCanonicalMapping
         return NormalizedPath(display: display, key: caseInsensitive ? display.lowercased() : display)
     }

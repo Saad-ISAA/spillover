@@ -33,16 +33,17 @@ public final class ProfileStore {
     public func create(displayName: String) throws -> Profile {
         let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { throw ProfileError.invalidName }
-        var stored = try load()
-        let id = uniqueID(base: ProfileID.slug(from: name), taken: Set(stored.map(\.id)))
-        let dir = paths.profilesDir.appendingPathComponent(id, isDirectory: true)
-        try SafeFS.ensureDir(paths.root)
-        try SafeFS.ensureDir(paths.profilesDir)
-        try SafeFS.ensureDir(dir)
-        let profile = Profile(id: id, displayName: name, configDir: dir.path)
-        stored.append(profile)
-        try save(stored)
-        return profile
+        return try locked {
+            var stored = try load()
+            let id = uniqueID(base: ProfileID.slug(from: name), taken: Set(stored.map(\.id)))
+            let dir = paths.profilesDir.appendingPathComponent(id, isDirectory: true)
+            try SafeFS.ensureDir(paths.profilesDir)
+            try SafeFS.ensureDir(dir)
+            let profile = Profile(id: id, displayName: name, configDir: dir.path)
+            stored.append(profile)
+            try save(stored)
+            return profile
+        }
     }
 
     /// Register an existing config directory (e.g. one created by the prototype). The directory is
@@ -60,31 +61,34 @@ public final class ProfileStore {
         if key == comparisonKey(paths.defaultClaudeDir.path) {
             throw ProfileError.directoryIsDefault(directory)
         }
-        var stored = try load()
-        if let clash = stored.first(where: { $0.configDir.map(comparisonKey) == key }) {
-            throw ProfileError.directoryAlreadyUsed(directory, by: clash.id)
+        return try locked {
+            var stored = try load()
+            if let clash = stored.first(where: { $0.configDir.map(comparisonKey) == key }) {
+                throw ProfileError.directoryAlreadyUsed(directory, by: clash.id)
+            }
+            let id = uniqueID(base: ProfileID.slug(from: name), taken: Set(stored.map(\.id)))
+            // Keep the path string exactly as the user logged in with it (minus trailing slashes):
+            // Claude Code derives the Keychain item from this exact string, so canonicalising it
+            // (e.g. resolving symlinks) could point the profile at an empty login.
+            var exact = directory
+            while exact.count > 1 && exact.hasSuffix("/") { exact.removeLast() }
+            let profile = Profile(id: id, displayName: name, configDir: exact)
+            stored.append(profile)
+            try save(stored)
+            return profile
         }
-        let id = uniqueID(base: ProfileID.slug(from: name), taken: Set(stored.map(\.id)))
-        // Keep the path string exactly as the user logged in with it (minus trailing slashes):
-        // Claude Code derives the Keychain item from this exact string, so canonicalising it
-        // (e.g. resolving symlinks) could point the profile at an empty login.
-        var exact = directory
-        while exact.count > 1 && exact.hasSuffix("/") { exact.removeLast() }
-        let profile = Profile(id: id, displayName: name, configDir: exact)
-        stored.append(profile)
-        try SafeFS.ensureDir(paths.root)
-        try save(stored)
-        return profile
     }
 
     public func rename(id: String, to newName: String) throws {
         let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { throw ProfileError.invalidName }
         if id == Profile.defaultID { throw ProfileError.cannotRemoveDefault }
-        var stored = try load()
-        guard let i = stored.firstIndex(where: { $0.id == id }) else { throw ProfileError.notFound(id) }
-        stored[i].displayName = name
-        try save(stored)
+        try locked {
+            var stored = try load()
+            guard let i = stored.firstIndex(where: { $0.id == id }) else { throw ProfileError.notFound(id) }
+            stored[i].displayName = name
+            try save(stored)
+        }
     }
 
     /// Remove from the registry. The directory is only deleted when `deleteDirectory` is true AND it
@@ -92,16 +96,23 @@ public final class ProfileStore {
     /// Callers must first make sure no route points at the profile (see `AppService.removeProfile`).
     public func remove(id: String, deleteDirectory: Bool = false) throws {
         if id == Profile.defaultID { throw ProfileError.cannotRemoveDefault }
-        var stored = try load()
-        guard let i = stored.firstIndex(where: { $0.id == id }) else { throw ProfileError.notFound(id) }
-        let removed = stored.remove(at: i)
-        try save(stored)
+        let removed: Profile = try locked {
+            var stored = try load()
+            guard let i = stored.firstIndex(where: { $0.id == id }) else { throw ProfileError.notFound(id) }
+            let removed = stored.remove(at: i)
+            try save(stored)
+            return removed
+        }
         if deleteDirectory, let dir = removed.configDir, isInsideProfilesDir(dir) {
             try? FileManager.default.removeItem(atPath: dir)
         }
     }
 
     // MARK: Internals
+
+    private func locked<T>(_ body: () throws -> T) throws -> T {
+        try SafeFS.withLock(root: paths.root, body)
+    }
 
     private func uniqueID(base: String, taken: Set<String>) -> String {
         var candidate = base
@@ -125,6 +136,13 @@ public final class ProfileStore {
 
     private func load() throws -> [Profile] {
         let url = paths.profilesFile
+        // profiles.json decides which config directory Claude runs with, so it gets the same
+        // ownership checks as routes.json.
+        if let problem = SafeFS.trustProblem(paths.root, name: "the Switchboard folder")
+            ?? SafeFS.trustProblem(url, name: "profiles.json")
+        {
+            throw ProfileError.registryCorrupt(problem)
+        }
         guard FileManager.default.fileExists(atPath: url.path) else { return [] }
         let data: Data
         do { data = try Data(contentsOf: url) } catch {

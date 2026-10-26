@@ -36,6 +36,7 @@ public enum InstallError: Error, LocalizedError, Equatable {
     case existingWrapper(String)
     case settingsUnreadable(String)
     case verificationFailed
+    case manifestUnreadable(String)
 
     public var errorDescription: String? {
         switch self {
@@ -45,6 +46,8 @@ public enum InstallError: Error, LocalizedError, Equatable {
             return "claudeCode.claudeProcessWrapper is already set to \(v). Re-run with --force to replace it (it will be restored on uninstall)."
         case .settingsUnreadable(let why): return "Cannot edit settings: \(why)"
         case .verificationFailed: return "The edited settings did not verify; nothing was changed."
+        case .manifestUnreadable(let why):
+            return "~/.switchboard/install-manifest.json is unreadable (\(why)). Fix or remove it; backups are in ~/.switchboard/backups."
         }
     }
 }
@@ -101,9 +104,16 @@ public struct VSCodeInstaller {
 
         let previousRaw = doc.rawValue(forKey: Self.wrapperKey)
         if doc.stringValue(forKey: Self.wrapperKey) == launcherPath {
-            if let existing = try manifest().records.first(where: { $0.editor == editor }) {
-                return existing
-            }
+            // Already pointing at us. Never record our own launcher as the "previous" value:
+            // uninstall would then "restore" it.
+            var m = try manifest()
+            if let existing = m.records.first(where: { $0.editor == editor }) { return existing }
+            let record = InstallRecord(
+                editor: editor, settingsPath: url.path, backupPath: nil, previousValueJSON: nil,
+                installedSHA256: Self.sha256(original), installedAt: Date())
+            m.records.append(record)
+            try saveManifest(m)
+            return record
         } else if previousRaw != nil && !force {
             throw InstallError.existingWrapper(previousRaw ?? "")
         }
@@ -137,12 +147,16 @@ public struct VSCodeInstaller {
     public func uninstall(editor: Editor) throws -> UninstallOutcome {
         var m = try manifest()
         let record = m.records.first { $0.editor == editor }
-        defer {
-            if record != nil {
-                m.records.removeAll { $0.editor == editor }
-                try? saveManifest(m)
-            }
+        // Any thrown error keeps the record, so a later retry can still restore the previous value.
+        let outcome = try restore(editor: editor, record: record)
+        if record != nil {
+            m.records.removeAll { $0.editor == editor }
+            try saveManifest(m)
         }
+        return outcome
+    }
+
+    private func restore(editor: Editor, record: InstallRecord?) throws -> UninstallOutcome {
         let url = editor.settingsFile(env: env)
         guard FileManager.default.fileExists(atPath: url.path) else { return .nothingToDo }
         let current = try readText(url)
@@ -196,12 +210,18 @@ public struct VSCodeInstaller {
         var records: [InstallRecord] = []
     }
 
+    /// A missing manifest is empty; an unreadable one is an error (treating it as empty would
+    /// overwrite other editors' records and lose their previous values).
     private func manifest() throws -> Manifest {
         let url = env.paths.installManifest
-        guard let data = try? Data(contentsOf: url) else { return Manifest() }
+        guard FileManager.default.fileExists(atPath: url.path) else { return Manifest() }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        return (try? decoder.decode(Manifest.self, from: data)) ?? Manifest()
+        do {
+            return try decoder.decode(Manifest.self, from: Data(contentsOf: url))
+        } catch {
+            throw InstallError.manifestUnreadable(error.localizedDescription)
+        }
     }
 
     private func saveManifest(_ m: Manifest) throws {

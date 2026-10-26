@@ -47,19 +47,13 @@ public final class RouteStore {
     /// Load with integrity checks. The launcher uses this directly so it can fail closed.
     public func load() -> RouteLoad {
         let url = paths.routesFile
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: url.path) else { return .missing }
-
-        if !SafeFS.isOwnedByCurrentUser(url) { return .insecure("routes.json is not owned by you") }
-        if SafeFS.isWritableByOthers(url) { return .insecure("routes.json is writable by others") }
-        if fm.fileExists(atPath: paths.root.path) {
-            if !SafeFS.isOwnedByCurrentUser(paths.root) {
-                return .insecure("the Switchboard folder is not owned by you")
-            }
-            if SafeFS.isWritableByOthers(paths.root) {
-                return .insecure("the Switchboard folder is writable by others")
-            }
+        // The folder is checked first: if others could write it, they could also delete
+        // routes.json to turn routed folders into unrouted ones.
+        if let problem = SafeFS.trustProblem(paths.root, name: "the Switchboard folder") {
+            return .insecure(problem)
         }
+        guard FileManager.default.fileExists(atPath: url.path) else { return .missing }
+        if let problem = SafeFS.trustProblem(url, name: "routes.json") { return .insecure(problem) }
 
         let data: Data
         do { data = try Data(contentsOf: url) } catch { return .corrupt(error.localizedDescription) }
@@ -68,8 +62,9 @@ public final class RouteStore {
         do {
             let file = try decoder.decode(File.self, from: data)
             guard file.version == 1 else { return .corrupt("unsupported version \(file.version)") }
-            for route in file.routes where !route.folder.hasPrefix("/") {
-                return .corrupt("route with a relative folder")
+            for route in file.routes
+            where PathNormalizer.normalize(route.folder, caseInsensitive: env.caseInsensitivePaths) == nil {
+                return .corrupt("route with an invalid folder")
             }
             return .loaded(file.routes)
         } catch {
@@ -111,12 +106,14 @@ public final class RouteStore {
         }
         guard knownProfileIDs.contains(profileId) else { throw RouteError.unknownProfile(profileId) }
 
-        var current = try routes()
-        current.removeAll { sameFolder($0.folder, normalized.display) }
-        let route = Route(folder: normalized.display, profileId: profileId)
-        current.append(route)
-        try save(current)
-        return route
+        return try SafeFS.withLock(root: paths.root) {
+            var current = try routes()
+            current.removeAll { sameFolder($0.folder, normalized.display) }
+            let route = Route(folder: normalized.display, profileId: profileId)
+            current.append(route)
+            try save(current)
+            return route
+        }
     }
 
     public func remove(folder: String) throws {
@@ -124,24 +121,33 @@ public final class RouteStore {
             let normalized = PathNormalizer.normalize(
                 folder, caseInsensitive: env.caseInsensitivePaths, home: env.home.path)
         else { throw RouteError.notAbsolute(folder) }
-        var current = try routes()
-        let before = current.count
-        current.removeAll { sameFolder($0.folder, normalized.display) }
-        guard current.count != before else { throw RouteError.noSuchRoute(normalized.display) }
-        try save(current)
+        try SafeFS.withLock(root: paths.root) {
+            var current = try routes()
+            let before = current.count
+            current.removeAll { sameFolder($0.folder, normalized.display) }
+            guard current.count != before else { throw RouteError.noSuchRoute(normalized.display) }
+            try save(current)
+        }
     }
 
     /// Used when a profile is removed: drop every route that points at it.
     public func removeAll(referencing profileId: String) throws {
-        let current = try routes()
-        let kept = current.filter { $0.profileId != profileId }
-        if kept.count != current.count { try save(kept) }
+        try SafeFS.withLock(root: paths.root) {
+            let current = try routes()
+            let kept = current.filter { $0.profileId != profileId }
+            if kept.count != current.count { try save(kept) }
+        }
     }
 
     // MARK: Internals
 
+    /// Compares normalised keys, so legacy non-canonical entries are recognised too.
     private func sameFolder(_ a: String, _ b: String) -> Bool {
-        env.caseInsensitivePaths ? a.lowercased() == b.lowercased() : a == b
+        let ci = env.caseInsensitivePaths
+        guard let ka = PathNormalizer.normalize(a, caseInsensitive: ci)?.key,
+            let kb = PathNormalizer.normalize(b, caseInsensitive: ci)?.key
+        else { return a == b }
+        return ka == kb
     }
 
     private func save(_ routes: [Route]) throws {

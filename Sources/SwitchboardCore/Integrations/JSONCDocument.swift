@@ -126,7 +126,7 @@ public struct JSONCDocument {
     }
 
     public func removing(key: String) -> String {
-        guard let index = members.firstIndex(where: { $0.key == key }) else {
+        guard let index = members.lastIndex(where: { $0.key == key }) else {
             return String(decoding: bytes, as: UTF8.self)
         }
         let m = members[index]
@@ -167,7 +167,8 @@ public struct JSONCDocument {
 
     // MARK: Helpers
 
-    private func member(_ key: String) -> Member? { members.first { $0.key == key } }
+    /// With duplicate keys VS Code uses the LAST one, so edits target the last one too.
+    private func member(_ key: String) -> Member? { members.last { $0.key == key } }
 
     private func replacing(_ range: Range<Int>, with text: String) -> String {
         var out = bytes

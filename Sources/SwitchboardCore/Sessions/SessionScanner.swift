@@ -64,9 +64,7 @@ public struct SessionScanner {
         let uid = getuid()
         var sessions: [RunningSession] = []
         for pid in Self.allPIDs() where pid > 0 {
-            guard let path = Self.executablePath(pid), (path as NSString).lastPathComponent == "claude" else {
-                continue
-            }
+            guard let path = Self.executablePath(pid), Self.isClaudeExecutable(path) else { continue }
             guard let info = Self.basicInfo(pid), info.uid == uid else { continue }
             guard let args = Self.procArgs(pid) else { continue }
             let parsed = Self.parseProcArgs(args)
@@ -113,6 +111,16 @@ public struct SessionScanner {
             guard let pd = p.configDir else { return false }
             return PathNormalizer.normalize(pd, caseInsensitive: caseInsensitive)?.key == key
         }?.id
+    }
+
+    /// Editor-bundled binaries are named `claude`; the native installer runs versioned files
+    /// such as `~/.local/share/claude/versions/2.1.266`.
+    static func isClaudeExecutable(_ path: String) -> Bool {
+        let name = (path as NSString).lastPathComponent
+        if name == "claude" { return true }
+        let parent = (path as NSString).deletingLastPathComponent
+        return (parent as NSString).lastPathComponent == "versions"
+            && ((parent as NSString).deletingLastPathComponent as NSString).lastPathComponent == "claude"
     }
 
     // MARK: Parsing (pure, tested)

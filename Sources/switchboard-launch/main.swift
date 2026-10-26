@@ -8,6 +8,8 @@ import SwitchboardCore
 //
 // It decides which profile the current folder belongs to, then replaces itself with the real
 // Claude process (execve), so stdin/stdout/stderr and signals belong to Claude directly.
+// Arguments and every environment entry Switchboard does not change are passed on as the original
+// bytes, so values that are not valid UTF-8 survive untouched.
 
 let env = SBEnvironment.live()
 let invokedAs = (CommandLine.arguments.first.map { ($0 as NSString).lastPathComponent }) ?? ""
@@ -22,11 +24,28 @@ case .refuse(let message):
     FileHandle.standardError.write(Data((message + "\n").utf8))
     exit(78)  // EX_CONFIG
 case .exec(let plan, _):
-    let argv = [plan.executable] + plan.args
-    let envp = plan.environment.map { "\($0.key)=\($0.value)" }
+    // Keys the planner set, changed or removed.
+    var changed = Set<String>()
+    for (k, v) in plan.environment where env.processEnv[k] != v { changed.insert(k) }
+    for k in env.processEnv.keys where plan.environment[k] == nil { changed.insert(k) }
 
-    var cArgs: [UnsafeMutablePointer<CChar>?] = argv.map { strdup($0) } + [nil]
-    var cEnv: [UnsafeMutablePointer<CChar>?] = envp.map { strdup($0) } + [nil]
+    var cEnv: [UnsafeMutablePointer<CChar>?] = []
+    var entry = environ
+    while let pointer = entry.pointee {
+        let raw = String(cString: pointer)
+        let key = raw.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? raw
+        if !changed.contains(key) { cEnv.append(pointer) }
+        entry += 1
+    }
+    for key in changed.sorted() {
+        if let value = plan.environment[key] { cEnv.append(strdup("\(key)=\(value)")) }
+    }
+    cEnv.append(nil)
+
+    var cArgs: [UnsafeMutablePointer<CChar>?] = [strdup(plan.executable)]
+    for i in 1..<Int(CommandLine.argc) { cArgs.append(CommandLine.unsafeArgv[i]) }
+    cArgs.append(nil)
+
     execve(plan.executable, &cArgs, &cEnv)
 
     // Only reached when execve failed.

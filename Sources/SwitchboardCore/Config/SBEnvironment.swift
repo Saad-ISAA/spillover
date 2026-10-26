@@ -39,7 +39,11 @@ public struct SBEnvironment: Sendable {
         if let override = env["SWITCHBOARD_HOME"], override.hasPrefix("/") {
             root = URL(fileURLWithPath: override, isDirectory: true)
         }
-        return SBEnvironment(home: home, appRoot: root, processEnv: env)
+        // Case sensitivity follows the volume that holds the home folder (APFS can be either).
+        let values = try? home.resourceValues(forKeys: [.volumeSupportsCaseSensitiveNamesKey])
+        let caseSensitive = values?.volumeSupportsCaseSensitiveNames ?? false
+        return SBEnvironment(
+            home: home, appRoot: root, processEnv: env, caseInsensitivePaths: !caseSensitive)
     }
 
     public var paths: SBPaths { SBPaths(env: self) }

@@ -55,7 +55,7 @@ final class SessionScannerTests: XCTestCase {
         // Smoke test against the real process table: must not crash and must only list "claude".
         let box = try Sandbox()
         for s in SessionScanner(env: box.env).scan() {
-            XCTAssertEqual((s.executable as NSString).lastPathComponent, "claude")
+            XCTAssertTrue(SessionScanner.isClaudeExecutable(s.executable))
         }
     }
 }
