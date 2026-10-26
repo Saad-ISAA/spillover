@@ -13,8 +13,12 @@ public struct LaunchLog {
 
     public func append(mode: LaunchMode, cwd: String, profile: String, outcome: String) {
         let stamp = ISO8601DateFormatter().string(from: Date())
-        let line = Redaction.scrub(
-            "\(stamp) mode=\(mode.rawValue) profile=\(profile) result=\(outcome) cwd=\(cwd)") + "\n"
+        // The folder path is not a credential and long hyphenated folder names would trip the
+        // long-run rule, so only the other fields go through the scrubber. Newlines are removed so
+        // a crafted folder name cannot forge extra log lines.
+        let safeCwd = cwd.replacingOccurrences(of: "\n", with: "\\n").replacingOccurrences(of: "\r", with: "\\r")
+        let line = Redaction.scrub("\(stamp) mode=\(mode.rawValue) profile=\(profile) result=\(outcome)")
+            + " cwd=\(safeCwd)\n"
         let paths = env.paths
         let fm = FileManager.default
         do {

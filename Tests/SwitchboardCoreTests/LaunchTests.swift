@@ -84,6 +84,17 @@ final class LaunchPlannerTests: XCTestCase {
         XCTAssertEqual(SafeFS.permissions(of: env.paths.launchLog), 0o600)
     }
 
+    func testLaunchLogKeepsLongFolderNamesAndCannotBeForged() throws {
+        let (box, env, _) = try setup()
+        let folder = try box.mkdir("a-very-long-hyphenated-project-folder-name-for-a-client")
+        _ = LaunchPlanner(env: env).plan(
+            LaunchRequest(mode: .shellShim, cwd: folder.path, args: [], environment: env.processEnv))
+        LaunchLog(env: env).append(mode: .shellShim, cwd: "/x\nfake line", profile: "-", outcome: "unrouted")
+        let log = box.read(env.paths.launchLog)
+        XCTAssertTrue(log.contains("a-very-long-hyphenated-project-folder-name-for-a-client"))
+        XCTAssertEqual(log.split(separator: "\n").count, 2)
+    }
+
     func testMissingClaudeRefuses() throws {
         let box = try Sandbox()
         var env = box.env
