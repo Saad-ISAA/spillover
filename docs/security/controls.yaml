@@ -1,0 +1,121 @@
+# Security control register.
+# status: enforced (single owner + automated test) | centralised (single owner, no test yet)
+#         | absent | exempt (with reason) | n/a
+version: 1
+controls:
+  - id: SB-SEC-01
+    title: Switchboard never reads, copies or stores Claude credentials
+    status: enforced
+    owner: Sources/SwitchboardCore/Profiles/KeychainSlot.swift
+    tests:
+      - ArchitectureTests.testKeychainIsNeverReadForSecrets
+      - KeychainSlotTests.testProbeNeverAsksForSecrets
+
+  - id: SB-SEC-02
+    title: Text that reaches logs is scrubbed; launch log records no arguments
+    status: enforced
+    owner: Sources/SwitchboardCore/Security/Redaction.swift
+    tests:
+      - RedactionTests
+      - LaunchPlannerTests.testLaunchLogHasNoArguments
+      - LaunchPlannerTests.testLaunchLogKeepsLongFolderNamesAndCannotBeForged
+
+  - id: SB-SEC-03
+    title: State files are owner-only and written atomically
+    status: enforced
+    owner: Sources/SwitchboardCore/Security/SafeFS.swift
+    tests:
+      - RouteStoreTests.testRoutesFileIsOwnerOnly
+      - ProfileStoreTests.testCreateMakesOwnerOnlyDirectoryAndUniqueSlug
+      - LaunchPlannerTests.testLaunchLogHasNoArguments
+
+  - id: SB-SEC-04
+    title: Tampered or unreadable routes refuse every launch
+    status: enforced
+    owner: Sources/SwitchboardCore/Routing/RouteStore.swift
+    tests:
+      - RouteStoreTests.testWorldWritableFileIsInsecure
+      - RouteStoreTests.testCorruptFileFailsClosed
+      - ResolverTests.testCorruptRoutesRefuseEverywhere
+
+  - id: SB-SEC-05
+    title: A route that cannot be honoured never falls back to another account
+    status: enforced
+    owner: Sources/SwitchboardCore/Routing/Resolver.swift
+    tests:
+      - ResolverTests.testMissingProfileRefuses
+      - ResolverTests.testMissingProfileDirectoryRefuses
+      - LaunchPlannerTests.testRefusalNeverFallsBackToAnotherAccount
+
+  - id: SB-SEC-06
+    title: Only one place decides the Claude environment for a profile
+    status: enforced
+    owner: Sources/SwitchboardCore/Profiles/ProfileEnvironment.swift
+    tests:
+      - ArchitectureTests.testOnlyProfileEnvironmentNamesTheConfigVariable
+      - ProfileEnvironmentTests
+
+  - id: SB-SEC-07
+    title: Only the launcher replaces the process; only the command runner starts processes
+    status: enforced
+    owner: Sources/switchboard-launch/main.swift, Sources/SwitchboardCore/Profiles/CommandRunner.swift
+    tests:
+      - ArchitectureTests.testOnlyTheLauncherExecs
+      - ArchitectureTests.testOnlyCommandRunnerStartsProcesses
+
+  - id: SB-SEC-08
+    title: The launcher never executes itself (no loops through the shim)
+    status: enforced
+    owner: Sources/SwitchboardCore/Launch/RealClaudeLocator.swift
+    tests:
+      - RealClaudeLocatorTests.testNeverReturnsOwnShim
+
+  - id: SB-SEC-09
+    title: Paths are never parsed by a shell; generated scripts quote every value
+    status: enforced
+    owner: Sources/SwitchboardCore/Routing/PathNormalizer.swift, Sources/SwitchboardCore/Launch/TerminalLauncher.swift
+    tests:
+      - PathNormalizerTests.testSpacesAndOddCharactersSurvive
+      - ShellTests.testShellQuote
+      - ShellTests.testLoginScriptQuotesEverything
+
+  - id: SB-SEC-10
+    title: Editor settings edits are minimal, verified, backed up and exactly reversible
+    status: enforced
+    owner: Sources/SwitchboardCore/Integrations/VSCodeInstaller.swift
+    tests:
+      - VSCodeInstallerTests
+      - JSONCDocumentTests
+
+  - id: SB-SEC-11
+    title: Login, credential and history files are never shared between accounts
+    status: enforced
+    owner: Sources/SwitchboardCore/Profiles/ProfileSharing.swift
+    tests:
+      - ProfileSharingTests.testShareLinksAndRefusesSecrets
+      - ProfileSharingTests.testNeverShareWinsOverShareable
+
+  - id: SB-SEC-12
+    title: No network access (no telemetry, no undocumented APIs)
+    status: enforced
+    owner: none (absence is the control)
+    tests:
+      - ArchitectureTests.testNoNetworkClients
+
+  - id: SB-SEC-13
+    title: Extension contract drift is detected
+    status: enforced
+    owner: Sources/SwitchboardCore/Integrations/ExtensionContract.swift
+    tests:
+      - ExtensionContractTests
+
+  - id: SB-SEC-14
+    title: Tests run automatically before every release
+    status: absent
+    reason: Continuous integration has not been chosen yet. Run `swift test` before every release.
+
+  - id: SB-SEC-15
+    title: Release artefacts are signed and notarised
+    status: exempt
+    reason: Ad-hoc signing for now so no paid developer account is required.
+    reversal: Sign with a Developer ID and notarise once public releases are published.

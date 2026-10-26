@@ -56,6 +56,7 @@ final class AppModel: ObservableObject {
     init(env: SBEnvironment = .live()) {
         self.env = env
         self.service = AppService(env: env)
+        refreshInstalledHelpersIfOutdated()
         refreshLocal()
         refreshAuth()
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
@@ -334,7 +335,26 @@ final class AppModel: ObservableObject {
 
     // MARK: Setup
 
-    private var executablesDir: URL? { Bundle.main.executableURL?.resolvingSymlinksInPath().deletingLastPathComponent() }
+    /// Where the `switchboard` and `switchboard-launch` helpers are: `Contents/Helpers` inside the
+    /// app bundle, or next to the app binary in a development build.
+    private var executablesDir: URL? {
+        let helpers = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers", isDirectory: true)
+        if FileManager.default.fileExists(atPath: helpers.appendingPathComponent("switchboard-launch").path) {
+            return helpers
+        }
+        return Bundle.main.executableURL?.resolvingSymlinksInPath().deletingLastPathComponent()
+    }
+
+    /// After an app update, the copies in ~/.switchboard/bin must match the bundled helpers.
+    /// Only refreshes helpers that were already installed; never installs on its own.
+    func refreshInstalledHelpersIfOutdated() {
+        guard let dir = executablesDir, ShellShim(env: env).isLauncherInstalled else { return }
+        let bundled = dir.appendingPathComponent("switchboard-launch")
+        guard let new = try? Data(contentsOf: bundled), let old = try? Data(contentsOf: env.paths.launcher),
+            new != old
+        else { return }
+        _ = Setup(env: env).installBinaries(from: dir)
+    }
 
     func installBinariesIfNeeded() -> Bool {
         guard let dir = executablesDir else {

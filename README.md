@@ -1,0 +1,112 @@
+# Switchboard
+
+**One Claude subscription per folder, window and terminal — on the same Mac.**
+
+You have more than one Claude subscription (say, *Work* and *Personal*). Claude Code keeps one login per machine, so switching accounts in one VS Code window switches it everywhere. Switchboard fixes that: assign each project folder to an account, and every new Claude session in that folder — in the VS Code Claude panel, in VS Code's terminal, or in any other terminal — uses that account. Other windows keep theirs.
+
+It lives in the menu bar and also shows each account's session and weekly limits.
+
+- **Per-folder accounts** in a single, normal VS Code. No extra VS Code instances, no profile juggling.
+- **Every launch path**: the Claude Code editor panel, `claude` in VS Code's terminal, iTerm, Ghostty, Terminal.
+- **Usage at a glance**: 5-hour and weekly limits with reset countdowns for every account, plus token totals from local session logs.
+- **Safe by design**: it never reads, copies or stores a login token; every change to your editor or shell is backed up and can be undone with one button.
+- **Free and open source** (MIT). No account, no telemetry, no network requests of its own.
+
+> Status: early (0.1). macOS 14+. Claude Code first; Codex and other tools are planned.
+
+## How it works
+
+Claude Code reads its configuration — including which login to use — from `CLAUDE_CONFIG_DIR`. Each Switchboard **account** is simply its own config directory with its own login (Claude Code stores each directory's login in a separate macOS Keychain item).
+
+The Claude Code VS Code extension has a user setting, `claudeCode.claudeProcessWrapper`, that names a program to run instead of Claude. Switchboard points it at its small launcher. Every time a Claude session starts, the launcher looks at the session's folder, picks the account assigned to it, sets `CLAUDE_CONFIG_DIR`, and hands over to the real Claude binary. Terminals get the same behaviour through a `claude` command placed first on your `PATH`.
+
+```text
+VS Code Claude panel ─┐
+VS Code terminal ─────┼─► switchboard-launch ──► which account owns this folder? ──► real claude
+any other terminal ───┘                          (routes you set in the app)         with that account
+```
+
+Rules:
+
+- A folder's account applies to everything inside it. The most specific assignment wins.
+- Folders you never assigned behave exactly as before (your normal login).
+- If an assignment cannot be honoured (account removed, its folder missing, settings unreadable), Claude **refuses to start** in that folder and says why, rather than silently using a different subscription. Emergency override: `SWITCHBOARD_BYPASS=1`.
+- Changes apply to **new** sessions. A chat that is already open keeps its account until you start a new one.
+
+## Install
+
+Build from source (needs Xcode or the Xcode Command Line Tools; no Apple developer account):
+
+```sh
+git clone <this repository> switchboard
+cd switchboard
+scripts/build-app.sh
+open dist/Switchboard.app
+```
+
+The app is ad-hoc signed. On another Mac, the first launch needs right-click → **Open**.
+
+## First steps (in the app)
+
+1. **Accounts → Add account.** Name it (e.g. *Work*), choose which of your existing settings, skills and commands to reuse, and log in: a Terminal window opens the official `claude auth login`. Log in with the subscription you want for that account. Repeat for each subscription.
+2. **Folders → Assign a folder…** Pick the account, then the project folder. Recent VS Code folders are listed with a one-click account picker.
+3. **Setup → Visual Studio Code → Connect.** Then start a new Claude chat (or reload the window).
+4. Optional: **Setup → Terminals** so `claude` in any terminal follows the same assignments, and **Usage → Track limits** for each account.
+
+Already using `CLAUDE_CONFIG_DIR` folders by hand? **Accounts → Add account → Existing config folder** adopts them and keeps their logins.
+
+## What Switchboard changes on your Mac
+
+| Where | What | Undo |
+| --- | --- | --- |
+| `~/.switchboard/` | Its own state: accounts, folder assignments, launcher, logs, backups | delete the folder |
+| VS Code user `settings.json` | one key: `claudeCode.claudeProcessWrapper` (backup kept) | Setup → Disconnect |
+| `~/.zshrc` | a marked block that puts `~/.switchboard/shims` first on `PATH` (only if you turn on Terminals) | Setup → Terminals off |
+| An account's Claude `settings.json` | `statusLine` set to Switchboard's usage recorder; your own statusline keeps running (only if you turn on Track limits) | Usage → Track limits off |
+
+**Setup → Undo all changes** reverts every row above in one step. Accounts, logins and folder assignments are kept.
+
+## Usage limits
+
+Claude Code passes subscription limits (5-hour and 7-day usage with reset times) to the configured statusline command. With *Track limits* on, Switchboard records them per account whenever you use that account, and shows them in the menu bar. Limits are as fresh as your last Claude reply in that account; the app shows when each value was captured.
+
+Token totals come from each account's local session logs (`projects/**/*.jsonl`). Switchboard reads only the usage counters, model and folder of each reply. It ships no prices; to see estimated cost, add your own `~/.switchboard/prices.json`:
+
+```json
+{ "models": { "claude-opus": { "input": 15, "output": 75, "cacheWrite": 18.75, "cacheRead": 1.5 } } }
+```
+
+(USD per million tokens; keys match model ids by prefix. Unknown models are reported as unpriced, never as zero.)
+
+## Command line
+
+The app bundles a CLI with the same features, handy for scripts and troubleshooting:
+
+```sh
+switchboard status                     # accounts, logins, limits, assignments, setup
+switchboard route which ~/Code/app     # which account would Claude use here?
+switchboard doctor                     # read-only health checks
+switchboard log 20                     # recent launch decisions
+switchboard help                       # everything else
+```
+
+After connecting anything in the app, the CLI is at `~/.switchboard/bin/switchboard`.
+
+## Limitations
+
+- macOS only for now. Remote development (SSH, containers, WSL) runs Claude on the remote machine, outside Switchboard's reach.
+- Relies on the Claude Code extension's `claudeCode.claudeProcessWrapper` setting. **Health** warns if an extension update changes it.
+- The Claude panel's *Account & Usage* view may show “Auth method: Not specified” for routed sessions; the account, plan and usage shown are correct.
+- Logins themselves are handled entirely by Claude Code. Switchboard does not log you in or out by itself; it opens the official commands.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) and [docs/threat-model.md](docs/threat-model.md). In short: no token access, owner-only files, fail-closed routing, no network access, and every change reversible.
+
+## Acknowledgements
+
+Inspired by [CodexBar](https://github.com/steipete/CodexBar), which pioneered menu bar usage tracking for AI coding tools.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
