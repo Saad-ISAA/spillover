@@ -26,7 +26,7 @@ struct MenuPopover: View {
                 }
                 .padding(12)
             }
-            .frame(maxHeight: 520)
+            .frame(maxHeight: 600)
             Divider()
             footer
         }
@@ -191,7 +191,7 @@ private struct AccountRow: View {
                     Spacer()
                     let running = model.runningCount(for: profile)
                     if running > 0 {
-                        Label("\(running)", systemImage: "bolt.horizontal.fill")
+                        Text("\(running) running")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .help("\(running) Claude session\(running == 1 ? "" : "s") running on this account")
