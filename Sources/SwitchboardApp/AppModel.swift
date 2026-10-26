@@ -50,6 +50,7 @@ final class AppModel: ObservableObject {
     @Published var banner: Banner?
     @Published var now = Date()
     @Published var selectedSection: MainSection? = .accounts
+    @Published var sessions: [SessionAssessment] = []
 
     private var timer: Timer?
 
@@ -59,10 +60,12 @@ final class AppModel: ObservableObject {
         refreshInstalledHelpersIfOutdated()
         refreshLocal()
         refreshAuth()
+        refreshSessions()
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.now = Date()
                 self?.refreshUsageSnapshots()
+                self?.refreshSessions()
             }
         }
     }
@@ -133,6 +136,32 @@ final class AppModel: ObservableObject {
 
     func refreshUsageSnapshots() {
         snapshots = service.usageSnapshots()
+        if UserDefaults.standard.object(forKey: "notifyNearLimit") as? Bool ?? true {
+            LimitNotifier.check(snapshots: snapshots, profiles: profiles, now: now)
+        }
+    }
+
+    /// Fullest limit across all accounts (for the optional menu bar readout).
+    var peakUsage: Double? {
+        snapshots.values.map { $0.peakPercentage(at: now) }.max()
+    }
+
+    /// Running Claude sessions and whether each still matches its folder's assignment.
+    func refreshSessions() {
+        let env = self.env
+        Task.detached(priority: .utility) {
+            let scanner = SessionScanner(env: env)
+            let assessed = scanner.assess(scanner.scan())
+            await MainActor.run { self.sessions = assessed }
+        }
+    }
+
+    func runningCount(for profile: Profile) -> Int {
+        sessions.filter { $0.actualProfileId == profile.id }.count
+    }
+
+    var staleSessions: [SessionAssessment] {
+        sessions.filter { if case .stale = $0.state { return true } else { return false } }
     }
 
     /// Ask the Claude CLI about each profile's login (runs processes, so in the background).
@@ -155,6 +184,7 @@ final class AppModel: ObservableObject {
     func refreshAll() {
         refreshLocal()
         refreshAuth()
+        refreshSessions()
     }
 
     func runHealthChecks() {
@@ -241,9 +271,27 @@ final class AppModel: ObservableObject {
     func logIn(_ profile: Profile) {
         do {
             try service.openLoginTerminal(for: profile)
-            show(.info, "Terminal opened. Log in with the account for “\(profile.displayName)”, then press Refresh.")
+            show(.info, "Terminal opened. Log in with the account for “\(profile.displayName)”. This updates by itself when you are done.")
+            watchForLogin(profile)
         } catch {
             show(.error, error.localizedDescription)
+        }
+    }
+
+    /// Poll the login state for a few minutes after opening the login Terminal.
+    private func watchForLogin(_ profile: Profile) {
+        let env = self.env
+        Task.detached(priority: .utility) {
+            for _ in 0..<36 {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                if case .success(let s) = ClaudeCLI(env: env).authStatus(for: profile), s.loggedIn {
+                    await MainActor.run {
+                        self.statuses[profile.id] = .loggedIn(s)
+                        self.show(.success, "“\(profile.displayName)” is logged in as \(s.email.map(Redaction.email) ?? "your account").")
+                    }
+                    return
+                }
+            }
         }
     }
 

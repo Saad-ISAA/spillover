@@ -3,6 +3,7 @@ import SwitchboardCore
 
 struct SetupView: View {
     @EnvironmentObject var model: AppModel
+    @EnvironmentObject var prefs: Preferences
     @State private var confirmUndo = false
     @State private var replaceTarget: Editor?
 
@@ -47,6 +48,24 @@ struct SetupView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 Button("Open Usage") { model.selectedSection = .usage }
+            }
+
+            Card {
+                Label("Preferences", systemImage: "gearshape").font(.headline)
+                Toggle("Open Switchboard at login", isOn: Binding(
+                    get: { prefs.openAtLogin },
+                    set: { on in
+                        do { try prefs.setOpenAtLogin(on) } catch { model.show(.error, error.localizedDescription) }
+                    }))
+                .disabled(!Preferences.isBundled)
+                Toggle("Notify me at 80% and 95% of a limit", isOn: $prefs.notifyNearLimit)
+                    .disabled(!Preferences.isBundled)
+                Toggle("Show the fullest limit next to the menu bar icon", isOn: $prefs.showPercentInMenuBar)
+                if !Preferences.isBundled {
+                    Text("Login item and notifications need the app bundle (scripts/build-app.sh).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Card {

@@ -109,6 +109,13 @@ controls:
     tests:
       - ExtensionContractTests
 
+  - id: SB-SEC-16
+    title: Process inspection keeps only the two routing variables and the working directory
+    status: enforced
+    owner: Sources/SwitchboardCore/Sessions/SessionScanner.swift
+    tests:
+      - SessionScannerTests.testParseKeepsOnlyTwoVariables
+
   - id: SB-SEC-14
     title: Tests run automatically before every release
     status: absent

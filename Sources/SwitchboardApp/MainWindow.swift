@@ -2,7 +2,7 @@ import SwiftUI
 import SwitchboardCore
 
 enum MainSection: String, CaseIterable, Identifiable, Hashable {
-    case accounts, folders, usage, setup, health
+    case accounts, folders, sessions, usage, setup, health
 
     var id: String { rawValue }
 
@@ -10,6 +10,7 @@ enum MainSection: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .accounts: return "Accounts"
         case .folders: return "Folders"
+        case .sessions: return "Sessions"
         case .usage: return "Usage"
         case .setup: return "Setup"
         case .health: return "Health"
@@ -20,6 +21,7 @@ enum MainSection: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .accounts: return "person.2.fill"
         case .folders: return "folder.fill"
+        case .sessions: return "bolt.horizontal.fill"
         case .usage: return "chart.bar.fill"
         case .setup: return "wrench.and.screwdriver.fill"
         case .health: return "stethoscope"
@@ -65,6 +67,7 @@ struct MainWindow: View {
         switch model.selectedSection ?? .accounts {
         case .accounts: AccountsView()
         case .folders: FoldersView()
+        case .sessions: SessionsView()
         case .usage: UsageView()
         case .setup: SetupView()
         case .health: HealthView()
@@ -74,6 +77,7 @@ struct MainWindow: View {
     private func badge(for section: MainSection) -> Int {
         switch section {
         case .setup: return model.vscodeConnected ? 0 : 1
+        case .sessions: return model.staleSessions.count
         case .health: return model.health.filter { $0.status == .failure }.count
         default: return 0
         }

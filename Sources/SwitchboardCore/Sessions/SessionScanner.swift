@@ -1,0 +1,202 @@
+import Darwin
+import Foundation
+
+/// A Claude process running right now, as seen from outside.
+public struct RunningSession: Equatable, Sendable, Identifiable {
+    public let pid: Int32
+    public let executable: String
+    public let cwd: String?
+    /// `CLAUDE_CONFIG_DIR` of the process (nil = unset, i.e. Claude's default directory).
+    public let configDir: String?
+    /// Set when the session was started through Switchboard's launcher.
+    public let switchboardProfile: String?
+    public let startedAt: Date?
+
+    public var id: Int32 { pid }
+
+    public init(
+        pid: Int32, executable: String, cwd: String?, configDir: String?, switchboardProfile: String?,
+        startedAt: Date?
+    ) {
+        self.pid = pid
+        self.executable = executable
+        self.cwd = cwd
+        self.configDir = configDir
+        self.switchboardProfile = switchboardProfile
+        self.startedAt = startedAt
+    }
+}
+
+/// A running session compared with what the folder's assignment says today.
+public struct SessionAssessment: Equatable, Sendable, Identifiable {
+    public enum State: Equatable, Sendable {
+        /// Running on the account its folder is assigned to (or Default for unassigned folders).
+        case matches
+        /// The folder's assignment changed after this session started: restart it to switch.
+        case stale(expected: String)
+        /// The folder's assignment cannot be honoured; new sessions there are refused.
+        case refusedNow
+        /// Started with a config directory Switchboard does not know.
+        case unknownAccount
+    }
+
+    public let session: RunningSession
+    /// Profile id the session is actually running on (nil when unknown).
+    public let actualProfileId: String?
+    public let state: State
+
+    public var id: Int32 { session.pid }
+}
+
+/// Lists running Claude processes of the current user and reads exactly two environment
+/// variables from each (`CLAUDE_CONFIG_DIR`, `SWITCHBOARD_PROFILE`) plus its working directory.
+/// Every other environment variable is discarded while parsing and never stored.
+public struct SessionScanner {
+    static let keptVariables: Set<String> = [ProfileEnvironment.configDirKey, ProfileEnvironment.profileKey]
+
+    private let env: SBEnvironment
+
+    public init(env: SBEnvironment) {
+        self.env = env
+    }
+
+    public func scan() -> [RunningSession] {
+        let uid = getuid()
+        var sessions: [RunningSession] = []
+        for pid in Self.allPIDs() where pid > 0 {
+            guard let path = Self.executablePath(pid), (path as NSString).lastPathComponent == "claude" else {
+                continue
+            }
+            guard let info = Self.basicInfo(pid), info.uid == uid else { continue }
+            guard let args = Self.procArgs(pid) else { continue }
+            let parsed = Self.parseProcArgs(args)
+            sessions.append(
+                RunningSession(
+                    pid: pid, executable: path, cwd: Self.workingDirectory(pid),
+                    configDir: parsed.env[ProfileEnvironment.configDirKey],
+                    switchboardProfile: parsed.env[ProfileEnvironment.profileKey],
+                    startedAt: info.started))
+        }
+        return sessions.sorted { ($0.startedAt ?? .distantPast) > ($1.startedAt ?? .distantPast) }
+    }
+
+    /// Compare each running session with today's assignments.
+    public func assess(_ sessions: [RunningSession]) -> [SessionAssessment] {
+        let profiles = (try? ProfileStore(env: env).all()) ?? [Profile.builtInDefault()]
+        let resolver = Resolver(env: env)
+        return sessions.map { s in
+            let actual = Self.profileId(for: s, profiles: profiles, caseInsensitive: env.caseInsensitivePaths)
+            guard let cwd = s.cwd else {
+                return SessionAssessment(session: s, actualProfileId: actual, state: actual == nil ? .unknownAccount : .matches)
+            }
+            let expected: String
+            switch resolver.resolve(cwd: cwd) {
+            case .refused:
+                return SessionAssessment(session: s, actualProfileId: actual, state: .refusedNow)
+            case .unrouted:
+                expected = Profile.defaultID
+            case .routed(let p, _):
+                expected = p.id
+            }
+            guard let actual else {
+                return SessionAssessment(session: s, actualProfileId: nil, state: .unknownAccount)
+            }
+            return SessionAssessment(
+                session: s, actualProfileId: actual, state: actual == expected ? .matches : .stale(expected: expected))
+        }
+    }
+
+    static func profileId(for s: RunningSession, profiles: [Profile], caseInsensitive: Bool) -> String? {
+        guard let dir = s.configDir, !dir.isEmpty else { return Profile.defaultID }
+        let key = PathNormalizer.normalize(dir, caseInsensitive: caseInsensitive)?.key
+        return profiles.first { p in
+            guard let pd = p.configDir else { return false }
+            return PathNormalizer.normalize(pd, caseInsensitive: caseInsensitive)?.key == key
+        }?.id
+    }
+
+    // MARK: Parsing (pure, tested)
+
+    /// Parse a `KERN_PROCARGS2` buffer: argc, exec path, padding, argv, then environment strings.
+    /// Only `keptVariables` survive.
+    static func parseProcArgs(_ buffer: [UInt8]) -> (argv: [String], env: [String: String]) {
+        guard buffer.count >= 4 else { return ([], [:]) }
+        let argc = Int(buffer[0]) | Int(buffer[1]) << 8 | Int(buffer[2]) << 16 | Int(buffer[3]) << 24
+        var i = 4
+        // exec path
+        while i < buffer.count && buffer[i] != 0 { i += 1 }
+        // padding NULs
+        while i < buffer.count && buffer[i] == 0 { i += 1 }
+
+        func nextString() -> String? {
+            guard i < buffer.count else { return nil }
+            let start = i
+            while i < buffer.count && buffer[i] != 0 { i += 1 }
+            let s = String(decoding: buffer[start..<i], as: UTF8.self)
+            i += 1
+            return s
+        }
+
+        var argv: [String] = []
+        for _ in 0..<max(0, argc) {
+            guard let a = nextString() else { break }
+            argv.append(a)
+        }
+        var env: [String: String] = [:]
+        while let entry = nextString(), !entry.isEmpty {
+            guard let eq = entry.firstIndex(of: "=") else { continue }
+            let key = String(entry[..<eq])
+            if keptVariables.contains(key) {
+                env[key] = String(entry[entry.index(after: eq)...])
+            }
+        }
+        return (argv, env)
+    }
+
+    // MARK: Darwin
+
+    private static func allPIDs() -> [Int32] {
+        let count = proc_listallpids(nil, 0)
+        guard count > 0 else { return [] }
+        var pids = [Int32](repeating: 0, count: Int(count) + 32)
+        let filled = pids.withUnsafeMutableBytes { raw in
+            proc_listallpids(raw.baseAddress, Int32(raw.count))
+        }
+        return Array(pids.prefix(Int(max(0, filled))))
+    }
+
+    private static func executablePath(_ pid: Int32) -> String? {
+        var buffer = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
+        let n = proc_pidpath(pid, &buffer, UInt32(buffer.count))
+        guard n > 0 else { return nil }
+        return String(cString: buffer)
+    }
+
+    private static func basicInfo(_ pid: Int32) -> (uid: uid_t, started: Date?)? {
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        guard sysctl(&mib, 4, &info, &size, nil, 0) == 0, size > 0 else { return nil }
+        let tv = info.kp_proc.p_un.__p_starttime
+        let started = tv.tv_sec > 0 ? Date(timeIntervalSince1970: TimeInterval(tv.tv_sec)) : nil
+        return (info.kp_eproc.e_ucred.cr_uid, started)
+    }
+
+    private static func procArgs(_ pid: Int32) -> [UInt8]? {
+        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
+        var size = 0
+        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 0 else { return nil }
+        var buffer = [UInt8](repeating: 0, count: size)
+        guard sysctl(&mib, 3, &buffer, &size, nil, 0) == 0 else { return nil }
+        return Array(buffer.prefix(size))
+    }
+
+    private static func workingDirectory(_ pid: Int32) -> String? {
+        var info = proc_vnodepathinfo()
+        let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, size) == size else { return nil }
+        return withUnsafePointer(to: &info.pvi_cdir.vip_path) { ptr in
+            ptr.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
+        }
+    }
+}

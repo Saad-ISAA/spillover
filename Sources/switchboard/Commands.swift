@@ -279,6 +279,31 @@ struct Commands {
         }
     }
 
+    // MARK: sessions
+
+    func sessions(_ args: Args) {
+        let scanner = SessionScanner(env: env)
+        let assessed = scanner.assess(scanner.scan())
+        if assessed.isEmpty {
+            Out.line("No Claude sessions running.")
+            return
+        }
+        var rows: [[String]] = [["PID", "ACCOUNT", "STATE", "FOLDER"]]
+        for a in assessed {
+            let state: String
+            switch a.state {
+            case .matches: state = "ok"
+            case .stale(let expected): state = "restart → \(expected)"
+            case .refusedNow: state = "folder refused now"
+            case .unknownAccount: state = "unknown account"
+            }
+            rows.append([
+                "\(a.session.pid)", a.actualProfileId ?? "?", state, a.session.cwd ?? "?",
+            ])
+        }
+        Out.table(rows)
+    }
+
     // MARK: statusline (called by Claude Code)
 
     func statusline() {

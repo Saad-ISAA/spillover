@@ -24,6 +24,7 @@ let help = """
       switchboard install [--editor <name>] [--shell] [--statusline] [--all] [--force]
       switchboard uninstall                     Undo every change to editors and shells
       switchboard usage [--days N]              Limits and local token totals per profile
+      switchboard sessions                      Running Claude sessions and their accounts
       switchboard doctor [--no-keychain]        Health checks (read-only)
       switchboard log [N]                       Recent launch decisions
       switchboard import-legacy [routes.tsv]    Import a hand-made routes.tsv setup
@@ -54,6 +55,8 @@ do {
         try commands.uninstall(args)
     case "usage":
         try commands.usage(args)
+    case "sessions":
+        commands.sessions(args)
     case "statusline":
         commands.statusline()
     case "doctor":

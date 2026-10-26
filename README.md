@@ -8,7 +8,8 @@ It lives in the menu bar and also shows each account's session and weekly limits
 
 - **Per-folder accounts** in a single, normal VS Code. No extra VS Code instances, no profile juggling.
 - **Every launch path**: the Claude Code editor panel, `claude` in VS Code's terminal, iTerm, Ghostty, Terminal.
-- **Usage at a glance**: 5-hour and weekly limits with reset countdowns for every account, plus token totals from local session logs.
+- **Usage at a glance**: 5-hour and weekly limits with reset countdowns for every account, plus token totals from local session logs. Optional notifications at 80% and 95%.
+- **Live sessions**: see every running Claude session, which account it is on, and which ones still use an old account after you reassigned their folder.
 - **Safe by design**: it never reads, copies or stores a login token; every change to your editor or shell is backed up and can be undone with one button.
 - **Free and open source** (MIT). No account, no telemetry, no network requests of its own.
 
@@ -85,6 +86,7 @@ The app bundles a CLI with the same features, handy for scripts and troubleshoot
 ```sh
 switchboard status                     # accounts, logins, limits, assignments, setup
 switchboard route which ~/Code/app     # which account would Claude use here?
+switchboard sessions                   # running Claude sessions and their accounts
 switchboard doctor                     # read-only health checks
 switchboard log 20                     # recent launch decisions
 switchboard help                       # everything else

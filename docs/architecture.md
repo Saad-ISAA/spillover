@@ -74,6 +74,14 @@ launcher), then `CLAUDE_CONFIG_DIR`, then Default.
 `LocalUsageScanner` reads `<profile>/projects/**/*.jsonl`, counting only usage fields, deduplicated
 by message id.
 
+## Running sessions
+
+`Sessions/SessionScanner.swift` lists the user's own `claude` processes with `proc_listallpids`,
+`proc_pidpath`, `sysctl(KERN_PROCARGS2)` and `proc_pidinfo(PROC_PIDVNODEPATHINFO)`. While parsing a
+process's arguments it keeps exactly two environment variables (`CLAUDE_CONFIG_DIR`,
+`SWITCHBOARD_PROFILE`) and discards the rest. Each session is compared with today's resolution of
+its folder to flag sessions that need a restart after a reassignment.
+
 ## Files written
 
 All under `~/.switchboard` (override with `SWITCHBOARD_HOME`), directories `0700`, files `0600`,

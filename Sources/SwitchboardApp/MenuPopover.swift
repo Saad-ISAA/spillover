@@ -18,6 +18,9 @@ struct MenuPopover: View {
                     if !model.vscodeConnected {
                         setupHint
                     }
+                    if !model.staleSessions.isEmpty {
+                        staleHint
+                    }
                     accounts
                     folders
                 }
@@ -63,6 +66,21 @@ struct MenuPopover: View {
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var staleHint: some View {
+        Button {
+            open(.sessions)
+        } label: {
+            Label(
+                "\(model.staleSessions.count) running session\(model.staleSessions.count == 1 ? "" : "s") on an old account — start a new chat to switch",
+                systemImage: "arrow.triangle.2.circlepath"
+            )
+            .font(.caption)
+            .foregroundStyle(.orange)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.plain)
     }
 
     private var accounts: some View {
@@ -171,6 +189,13 @@ private struct AccountRow: View {
                     if let plan = model.statuses[profile.id]?.auth?.planLabel { PlanBadge(text: plan) }
                     loginIndicator
                     Spacer()
+                    let running = model.runningCount(for: profile)
+                    if running > 0 {
+                        Label("\(running)", systemImage: "bolt.horizontal.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .help("\(running) Claude session\(running == 1 ? "" : "s") running on this account")
+                    }
                     let n = model.folders(for: profile).count
                     if n > 0 {
                         Text("\(n) folder\(n == 1 ? "" : "s")").font(.caption2).foregroundStyle(.secondary)

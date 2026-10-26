@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct SwitchboardApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var model = AppModel()
+    @StateObject private var prefs = Preferences()
 
     var body: some Scene {
         MenuBarExtra {
@@ -19,12 +20,14 @@ struct SwitchboardApp: App {
         } label: {
             MenuBarLabel()
                 .environmentObject(model)
+                .environmentObject(prefs)
         }
         .menuBarExtraStyle(.window)
 
         Window("Switchboard", id: "main") {
             MainWindow()
                 .environmentObject(model)
+                .environmentObject(prefs)
         }
         .defaultSize(width: 900, height: 640)
 
@@ -42,10 +45,16 @@ struct SwitchboardApp: App {
 /// window at launch for screenshots.
 struct MenuBarLabel: View {
     @EnvironmentObject var model: AppModel
+    @EnvironmentObject var prefs: Preferences
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Image(systemName: "switch.2")
+        HStack(spacing: 3) {
+            Image(systemName: "switch.2")
+            if prefs.showPercentInMenuBar, let peak = model.peakUsage {
+                Text("\(Int(peak.rounded()))%").monospacedDigit()
+            }
+        }
             .accessibilityLabel("Switchboard")
             .onAppear {
                 guard let show = model.env.processEnv["SWITCHBOARD_DEMO_SHOW"] else {
