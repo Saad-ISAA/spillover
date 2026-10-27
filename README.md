@@ -63,16 +63,45 @@ Rules:
 
 ## Install
 
-Build from source (needs Xcode or the Xcode Command Line Tools; no Apple developer account):
+Spillover needs macOS 14 (Sonoma) or later and runs on Apple silicon and Intel Macs.
+
+### Download
+
+1. Download **Spillover-x.y.z.dmg** from the [latest release](https://github.com/Saad-ISAA/spillover/releases/latest).
+2. Open it and drag **Spillover** onto **Applications**.
+3. Open Spillover from Applications. It lives in the menu bar.
+
+Each release lists SHA-256 checksums in `SHA256SUMS` (`shasum -a 256 Spillover-x.y.z.dmg` to compare).
+
+If macOS says the app cannot be opened because it is from an unidentified developer, go to
+**System Settings → Privacy & Security** and choose **Open Anyway** next to Spillover (needed once).
+
+### Homebrew
 
 ```sh
-git clone <this repository> spillover
-cd spillover
-scripts/build-app.sh
-open dist/Spillover.app
+brew install --cask saad-isaa/spillover/spillover
 ```
 
-The app is ad-hoc signed. On another Mac, the first launch needs right-click → **Open**.
+This also puts the `spillover` command on your `PATH`. Update with `brew upgrade --cask spillover`.
+
+### Build from source
+
+Needs Xcode or the Xcode Command Line Tools; no Apple developer account.
+
+```sh
+git clone https://github.com/Saad-ISAA/spillover.git
+cd spillover
+scripts/build-app.sh
+cp -R dist/Spillover.app /Applications/
+open /Applications/Spillover.app
+```
+
+### Uninstall
+
+In Spillover, choose **Setup → Undo all changes** first, so your editor and shell settings go back
+to how they were. Then quit Spillover from its menu and move it to the Bin (or
+`brew uninstall --cask spillover`). Your accounts stay in `~/.spillover`; delete that folder if you
+no longer need them (their logins stay in Keychain until you log out of each first).
 
 ## First steps (in the app)
 

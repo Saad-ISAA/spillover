@@ -3,6 +3,7 @@
 #
 #   scripts/build-app.sh            release build, ad-hoc signed (no Apple developer account)
 #   SIGN_IDENTITY="Developer ID Application: ..." scripts/build-app.sh   sign with a real identity
+#   UNIVERSAL=1 scripts/build-app.sh   one binary for Apple silicon and Intel (used for releases)
 #
 # The bundle contains the menu bar app plus the `spillover` CLI and the `spillover-launch`
 # launcher, which the app installs into ~/.spillover/bin when you connect an editor or terminal.
@@ -13,11 +14,16 @@ VERSION=$(sed -n 's/^let version = "\(.*\)"$/\1/p' "$ROOT/Sources/spillover/main
 APP="$ROOT/dist/Spillover.app"
 IDENTITY=${SIGN_IDENTITY:--}
 
+ARCH_FLAGS=""
+[ "${UNIVERSAL:-0}" = 1 ] && ARCH_FLAGS="--arch arm64 --arch x86_64"
+
 cd "$ROOT"
-swift build -c release --product SpilloverApp
-swift build -c release --product spillover
-swift build -c release --product spillover-launch
-BIN=$(swift build -c release --show-bin-path)
+# shellcheck disable=SC2086
+for product in SpilloverApp spillover spillover-launch; do
+    swift build -c release $ARCH_FLAGS --product "$product"
+done
+# shellcheck disable=SC2086
+BIN=$(swift build -c release $ARCH_FLAGS --show-bin-path)
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Helpers" "$APP/Contents/Resources"
@@ -49,11 +55,14 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 
 # Sign helpers first, then the bundle. "-" is an ad-hoc signature: fine for local use; other
-# Macs will ask the user to confirm the first launch (right-click > Open).
+# Macs ask the user to approve the first launch (System Settings > Privacy & Security).
+# A real identity also gets a secure timestamp, which notarization requires.
+TIMESTAMP=""
+[ "$IDENTITY" != "-" ] && TIMESTAMP="--timestamp"
 for exe in spillover spillover-launch; do
-    codesign --force --sign "$IDENTITY" --options runtime "$APP/Contents/Helpers/$exe"
+    codesign --force --sign "$IDENTITY" --options runtime $TIMESTAMP "$APP/Contents/Helpers/$exe"
 done
-codesign --force --sign "$IDENTITY" --options runtime "$APP"
+codesign --force --sign "$IDENTITY" --options runtime $TIMESTAMP "$APP"
 codesign --verify --deep --strict "$APP"
 
 echo "Built $APP ($VERSION)"
