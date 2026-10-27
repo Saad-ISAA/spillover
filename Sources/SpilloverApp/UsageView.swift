@@ -56,13 +56,7 @@ struct UsageView: View {
                     HStack(alignment: .firstTextBaseline) {
                         Text("Limit over the last 7 days").font(TypeScale.section).foregroundStyle(Ink.text)
                         Spacer()
-                        Picker("Window", selection: $historyKind) {
-                            Text("Weekly").tag(UsageWindow.Kind.sevenDay)
-                            Text("Session").tag(UsageWindow.Kind.fiveHour)
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .fixedSize()
+                        Segmented(options: [(.sevenDay, "Weekly"), (.fiveHour, "Session")], selection: $historyKind)
                     }
                     LimitHistoryChart(points: model.history[profile.id] ?? [], kind: historyKind, now: model.now, height: 170)
                     Text("Drops to zero are resets. The dashed line marks 80%, where Spillover warns you.")
@@ -104,14 +98,7 @@ struct UsageView: View {
                 }
             }
             HStack(spacing: 16) {
-            Picker("Period", selection: $model.reportDays) {
-                Text("7 days").tag(7)
-                Text("14 days").tag(14)
-                Text("30 days").tag(30)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
+            Segmented(options: [(7, "7 days"), (14, "14 days"), (30, "30 days")], selection: $model.reportDays)
             Spacer()
             if let profile {
                 Toggle("Track limits", isOn: Binding(

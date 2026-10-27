@@ -318,32 +318,14 @@ struct AssignFolderMenu: View {
     var bordered = false
 
     var body: some View {
-        Menu {
+        Dropdown(title: label, look: bordered ? .field : .link, help: "Give a folder its own account") {
             let accounts = model.profiles.filter { !$0.isDefault }
-            if accounts.isEmpty {
-                Text("Add an account first")
-            }
-            ForEach(accounts) { p in
-                Button("\(p.displayName)…") {
+            if accounts.isEmpty { return [.note("Add an account first")] }
+            return accounts.map { p in
+                .action("\(p.displayName)…") {
                     if let folder = model.chooseFolder() { model.assign(folder: folder, to: p.id) }
                 }
             }
-        } label: {
-            Text(label)
-        }
-        .modifier(AssignMenuStyle(bordered: bordered))
-        .fixedSize()
-    }
-}
-
-private struct AssignMenuStyle: ViewModifier {
-    let bordered: Bool
-
-    func body(content: Content) -> some View {
-        if bordered {
-            content.menuStyle(.button).buttonStyle(.bordered)
-        } else {
-            content.menuStyle(.borderlessButton).menuIndicator(.hidden).foregroundStyle(Ink.data)
         }
     }
 }
@@ -357,46 +339,34 @@ struct AccountMenu: View {
     var body: some View {
         let exact = model.exactRoute(for: folder)
         let resolution = model.resolution(for: folder)
-        Menu {
-            ForEach(model.profiles.filter { !$0.isDefault }) { p in
-                Button {
+        Dropdown(
+            title: Self.chipText(exact: exact, resolution: resolution, defaultName: model.defaultName), look: .chip,
+            help: Self.helpText(exact: exact, resolution: resolution)
+        ) {
+            var items: [DropdownItem] = model.profiles.filter { !$0.isDefault }.map { p in
+                .action(p.displayName, checked: exact?.profileId == p.id) {
                     model.switchWindow(folder: folder, to: p.id)
-                } label: {
-                    if exact?.profileId == p.id { Label(p.displayName, systemImage: "checkmark") } else { Text(p.displayName) }
                 }
             }
-            Divider()
-            Button {
+            items.append(.divider)
+            items.append(.action("Auto (most room)", checked: exact?.profileId == Profile.autoID) {
                 model.switchWindow(folder: folder, to: Profile.autoID)
-            } label: {
-                if exact?.profileId == Profile.autoID {
-                    Label("Auto (most room)", systemImage: "checkmark")
-                } else {
-                    Text("Auto (most room)")
-                }
-            }
-            Button("Default account (your normal login)") {
+            })
+            items.append(.action("\(model.defaultName) (your normal login)", checked: exact?.profileId == Profile.defaultID) {
                 model.switchWindow(folder: folder, to: Profile.defaultID)
-            }
+            })
             if exact != nil {
-                Divider()
-                Button("Remove assignment", role: .destructive) { model.unassign(folder: folder) }
+                items.append(.divider)
+                items.append(.action("Remove assignment") { model.unassign(folder: folder) })
             }
-        } label: {
-            // Plain text: menu labels drop composite content on macOS.
-            Text(Self.chipText(exact: exact, resolution: resolution))
+            return items
         }
-        .menuStyle(.button)
-        .buttonStyle(.bordered)
-        .controlSize(.small)
-        .fixedSize()
-        .help(Self.helpText(exact: exact, resolution: resolution))
     }
 
-    static func chipText(exact: Route?, resolution: Resolution) -> String {
+    static func chipText(exact: Route?, resolution: Resolution, defaultName: String = "Default") -> String {
         switch resolution {
         case .unrouted:
-            return "Default"
+            return defaultName
         case .refused:
             return "Blocked"
         case .routed(let p, let route):

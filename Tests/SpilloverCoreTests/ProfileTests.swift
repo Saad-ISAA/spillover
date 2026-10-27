@@ -11,6 +11,27 @@ final class ProfileStoreTests: XCTestCase {
         XCTAssertTrue(all[0].isDefault)
     }
 
+    func testRenameDefaultKeepsItUnsetAndOthersIntact() throws {
+        let box = try Sandbox()
+        let store = ProfileStore(env: box.env)
+        let work = try store.create(displayName: "Work")
+        try store.rename(id: Profile.defaultID, to: "Personal")
+        var all = try store.all()
+        XCTAssertEqual(all[0].displayName, "Personal")
+        XCTAssertEqual(all[0].id, Profile.defaultID)
+        XCTAssertNil(all[0].configDir)
+        XCTAssertEqual(all[1].id, work.id)
+        XCTAssertEqual(all[1].displayName, "Work")
+        XCTAssertEqual(all[1].configDir, work.configDir)
+        // Creating another profile keeps the name; renaming back to "Default" clears it.
+        _ = try store.create(displayName: "Client")
+        XCTAssertEqual(try store.all()[0].displayName, "Personal")
+        try store.rename(id: Profile.defaultID, to: "Default")
+        all = try store.all()
+        XCTAssertEqual(all[0].displayName, "Default")
+        XCTAssertFalse(box.read(box.env.paths.profilesFile).contains("defaultName"))
+    }
+
     func testCreateMakesOwnerOnlyDirectoryAndUniqueSlug() throws {
         let box = try Sandbox()
         let store = ProfileStore(env: box.env)

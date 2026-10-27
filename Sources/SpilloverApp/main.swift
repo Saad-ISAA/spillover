@@ -3,11 +3,19 @@ import SwiftUI
 import SpilloverCore
 import UserNotifications
 
-// Menu bar only: no Dock icon even when running outside an app bundle.
+// A menu bar app: the Dock icon appears only while the window is open, or always if the user
+// asks (DockPresence).
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        NSApp.setActivationPolicy(DockPresence.alwaysShown ? .regular : .accessory)
         if Preferences.isBundled { UNUserNotificationCenter.current().delegate = self }
+    }
+
+    /// Opening the app again (Finder, Spotlight, the Dock icon) brings its window forward.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        MainActor.assumeIsolated { DockPresence.openMainWindow?() }
+        NSApp.activate(ignoringOtherApps: true)
+        return false
     }
 
     /// "Move work to …" on a near-limit notification.
@@ -41,6 +49,7 @@ struct SpilloverApp: App {
         MenuBarExtra {
             MenuPopover()
                 .environmentObject(model)
+                .tint(Ink.data)
         } label: {
             MenuBarLabel()
                 .environmentObject(model)
@@ -74,13 +83,14 @@ struct MenuBarLabel: View {
 
     var body: some View {
         HStack(spacing: 3) {
-            Image(nsImage: MenuBarGlyph.image(fullest: model.peakUsage, roomiest: model.bestHeadroom?.peakPercentage))
+            Image(nsImage: MenuBarGlyph.image(alert: (model.peakUsage ?? 0) >= HeadroomAdvisor.warningThreshold))
             if prefs.showPercentInMenuBar, let peak = model.peakUsage {
                 Text("\(Int(peak.rounded()))%").monospacedDigit()
             }
         }
             .accessibilityLabel(model.peakUsage.map { "Spillover, fullest limit \(Int($0.rounded())) percent" } ?? "Spillover")
             .onAppear {
+                DockPresence.openMainWindow = { openWindow(id: "main") }
                 DemoRender.runIfRequested(model: model)
                 guard let show = model.env.processEnv["SPILLOVER_DEMO_SHOW"] else {
                     // First launch: open the window so the getting-started checklist is visible.
@@ -109,16 +119,22 @@ struct MenuBarLabel: View {
     }
 }
 
-/// The menu bar icon: the Spillover cups. The upper cup fills with the fullest limit across
-/// accounts, the lower one with the account that has the most room; the pour appears once an
-/// account reaches 80%. A template image, so macOS tints it for light, dark and highlight.
+/// The menu bar icon: the Spillover mark as in the app icon, a full cup pouring into one with
+/// room. `alert` adds a dot in the free corner once an account reaches 80% of a limit. A template
+/// image, so macOS tints it for light, dark and highlight.
 enum MenuBarGlyph {
-    static func image(fullest: Double?, roomiest: Double?) -> NSImage {
-        let upper = CGFloat((fullest ?? 0) / 100)
-        let lower = CGFloat((roomiest ?? 0) / 100)
-        return SpillMark.image(
-            size: 18, upper: max(upper, 0.12), lower: lower, spilling: (fullest ?? 0) >= HeadroomAdvisor.warningThreshold,
-            line: .black, liquid: .black, wallScale: 0.09, template: true)
+    static func image(alert: Bool) -> NSImage {
+        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { rect in
+            SpillMark.draw(in: rect, upper: 1, lower: 0.5, spilling: true, line: .black, liquid: .black, wallScale: 0.11, solid: true)
+            if alert {
+                let s = rect.width
+                NSColor.black.setFill()
+                NSBezierPath(ovalIn: NSRect(x: rect.minX + s * 0.08, y: rect.minY + s * 0.08, width: s * 0.26, height: s * 0.26)).fill()
+            }
+            return true
+        }
+        image.isTemplate = true
+        return image
     }
 }
 

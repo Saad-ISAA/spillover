@@ -8,7 +8,7 @@ struct FoldersView: View {
     var body: some View {
         Page(
             title: "Folders",
-            subtitle: "A folder's account also applies to everything inside it. Folders without an assignment use your normal (Default) login."
+            subtitle: "A folder's account also applies to everything inside it. Folders without an assignment use your normal login (\(model.defaultName))."
         ) {
             AssignFolderMenu(bordered: true)
         } content: {
@@ -93,35 +93,33 @@ private struct FolderRow: View {
             }
             Spacer()
             AccountMenu(folder: path)
-            Menu {
-                Button("Open in VS Code") { model.openInVSCode(path) }
-                Button("Show in Finder") { model.revealInFinder(path) }
+            Dropdown(title: "More", look: .icon("ellipsis")) {
+                var items: [DropdownItem] = [
+                    .action("Open in VS Code") { model.openInVSCode(path) },
+                    .action("Show in Finder") { model.revealInFinder(path) },
+                ]
                 if let p = model.assignedProfile(for: path) {
-                    Button("Open Terminal here as \(p.displayName)") { model.openShell(p, in: path) }
+                    items.append(.action("Open Terminal here as \(p.displayName)") { model.openShell(p, in: path) })
                 }
                 if assigned {
-                    Divider()
-                    Button("Remove assignment", role: .destructive) { model.unassign(folder: path) }
+                    items.append(.divider)
+                    items.append(.action("Remove assignment") { model.unassign(folder: path) })
                 }
-            } label: {
-                Image(systemName: "ellipsis")
+                return items
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("More")
         }
         .padding(.vertical, 9)
     }
 }
 
 struct ResolutionText: View {
+    @EnvironmentObject var model: AppModel
     let resolution: Resolution
 
     var body: some View {
         switch resolution {
         case .unrouted:
-            Notice(icon: "person.crop.circle", tone: .neutral, text: "No assignment: your normal (Default) login.")
+            Notice(icon: "person.crop.circle", tone: .neutral, text: "No assignment: your normal login (\(model.defaultName)).")
         case .routed(let p, let route):
             Notice(icon: "checkmark.circle.fill", tone: .positive, text: "\(p.displayName), via \(Fmt.shortFolder(route.folder)).")
         case .refused(let refusal):

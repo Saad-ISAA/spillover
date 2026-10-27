@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import ServiceManagement
 import SwiftUI
@@ -20,12 +21,23 @@ final class Preferences: ObservableObject {
         }
     }
 
+    /// Keep the Dock icon after the window closes (it always shows while the window is open).
+    @Published var alwaysInDock: Bool {
+        didSet {
+            defaults.set(alwaysInDock, forKey: "alwaysInDock")
+            DockPresence.alwaysShown = alwaysInDock
+        }
+    }
+
     @Published private(set) var openAtLogin: Bool
 
     init() {
         showPercentInMenuBar = defaults.object(forKey: "showPercentInMenuBar") as? Bool ?? false
         notifyNearLimit = defaults.object(forKey: "notifyNearLimit") as? Bool ?? true
+        let dock = defaults.object(forKey: "alwaysInDock") as? Bool ?? false
+        alwaysInDock = dock
         openAtLogin = Self.isBundled && SMAppService.mainApp.status == .enabled
+        DockPresence.alwaysShown = dock
     }
 
     /// Login items and notifications need a real app bundle (not a bare development binary).
@@ -35,6 +47,33 @@ final class Preferences: ObservableObject {
         guard Self.isBundled else { return }
         if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
         openAtLogin = SMAppService.mainApp.status == .enabled
+    }
+}
+
+/// The Dock icon: shown while the Spillover window is open (so the window can be found with
+/// Command-Tab and the Dock), or always if the user asks; otherwise the app lives in the menu bar.
+@MainActor
+enum DockPresence {
+    static var alwaysShown = false { didSet { update() } }
+    private static var windowOpen = false
+    /// Opens the main window; set by a view that can open windows.
+    static var openMainWindow: (() -> Void)?
+
+    static func windowDidOpen() {
+        windowOpen = true
+        update()
+    }
+
+    static func windowDidClose() {
+        windowOpen = false
+        update()
+    }
+
+    private static func update() {
+        let policy: NSApplication.ActivationPolicy = alwaysShown || windowOpen ? .regular : .accessory
+        guard NSApp != nil, NSApp.activationPolicy() != policy else { return }
+        NSApp.setActivationPolicy(policy)
+        if policy == .regular { NSApp.activate(ignoringOtherApps: true) }
     }
 }
 

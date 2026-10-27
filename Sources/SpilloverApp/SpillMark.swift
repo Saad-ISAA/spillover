@@ -5,10 +5,11 @@ import SwiftUI
 /// one shape: two open cups in a cascade, the upper one pouring over its rim into the lower one.
 enum SpillMark {
     /// Draws into the current graphics context, in a square `rect` (y up).
-    /// `upper` / `lower`: how full each cup is (0...1). `spilling`: draw the pour.
+    /// `upper` / `lower`: how full each cup is (0...1). `spilling`: draw the pour. `solid` runs the
+    /// liquid under the walls, for one-colour (template) drawing where a gap would show as a line.
     static func draw(
         in rect: NSRect, upper: CGFloat, lower: CGFloat, spilling: Bool, line: NSColor, liquid: NSColor,
-        wallScale: CGFloat = 0.07
+        wallScale: CGFloat = 0.07, solid: Bool = false
     ) {
         let s = rect.width
         let w = s * 0.4, h = s * 0.4, wall = s * wallScale, r = s * 0.11
@@ -18,10 +19,22 @@ enum SpillMark {
         func cup(_ o: NSPoint, fill: CGFloat) {
             let level = max(0, min(1, fill))
             if level > 0 {
-                let inner = NSRect(x: o.x + wall * 0.5, y: o.y + wall * 0.5, width: w - wall, height: (h - wall * 0.5) * level)
+                let inset = solid ? 0 : wall * 0.5
+                let inner = NSRect(x: o.x + inset, y: o.y + inset, width: w - inset * 2, height: (h - inset) * level)
                 liquid.setFill()
-                NSBezierPath(roundedRect: inner, xRadius: max(0, r - wall * 0.5), yRadius: max(0, r - wall * 0.5)).fill()
+                NSBezierPath(roundedRect: inner, xRadius: max(0, r - inset), yRadius: max(0, r - inset)).fill()
                 if inner.height > r { NSRect(x: inner.minX, y: inner.minY + r, width: inner.width, height: inner.height - r).fill() }
+                if solid && level >= 1 {
+                    // Brimming: the surface domes over the rim, as the crest does on the app icon.
+                    let dome = NSBezierPath()
+                    dome.move(to: NSPoint(x: o.x - wall * 0.5, y: o.y + h))
+                    dome.curve(
+                        to: NSPoint(x: o.x + w + wall * 0.5, y: o.y + h),
+                        controlPoint1: NSPoint(x: o.x + w * 0.2, y: o.y + h + s * 0.05),
+                        controlPoint2: NSPoint(x: o.x + w * 0.8, y: o.y + h + s * 0.05))
+                    dome.close()
+                    dome.fill()
+                }
             }
             let outline = NSBezierPath()
             outline.move(to: NSPoint(x: o.x, y: o.y + h))

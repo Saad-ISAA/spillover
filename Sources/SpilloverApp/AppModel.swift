@@ -98,6 +98,9 @@ final class AppModel: ObservableObject {
 
     func profile(id: String) -> Profile? { profiles.first { $0.id == id } }
 
+    /// What the user calls their normal login (the built-in Default account, renamable).
+    var defaultName: String { profiles.first(where: \.isDefault)?.displayName ?? "Default" }
+
     func folders(for profile: Profile) -> [Route] { routes.filter { $0.profileId == profile.id } }
 
     /// Effective profile for any folder (including inherited from a parent route).
@@ -305,9 +308,11 @@ final class AppModel: ObservableObject {
             for item in items {
                 do { try sharing.share(item, from: .builtInDefault(), to: p) } catch { skipped.append(item) }
             }
+            // Tracking already chosen for the other accounts carries over to the new one.
+            if statuslineOn.values.contains(true) { _ = Setup(env: env).connectStatusline(for: p) }
             refreshLocal()
             statuses[p.id] = .loggedOut
-            show(.success, "Created “\(p.displayName)”." + (skipped.isEmpty ? "" : " Not shared (missing in Default): \(skipped.joined(separator: ", "))."))
+            show(.success, "Created “\(p.displayName)”." + (skipped.isEmpty ? "" : " Not shared (missing in \(defaultName)): \(skipped.joined(separator: ", "))."))
             if thenLogIn { logIn(p) }
         } catch {
             show(.error, error.localizedDescription)
@@ -338,7 +343,7 @@ final class AppModel: ObservableObject {
             try service.removeProfile(id: profile.id, unassign: true, deleteDirectory: deleteDirectory)
             statuses[profile.id] = nil
             refreshLocal()
-            show(.info, "Removed “\(profile.displayName)”. Its folders now use the Default account.")
+            show(.info, "Removed “\(profile.displayName)”. Its folders now use \(defaultName).")
         } catch {
             show(.error, error.localizedDescription)
         }
@@ -519,6 +524,19 @@ final class AppModel: ObservableObject {
             let steps = Setup(env: env).disconnectShell()
             refreshLocal()
             if let bad = steps.first(where: { !$0.ok }) { show(.error, bad.detail) }
+        }
+    }
+
+    /// Limit tracking for every account in one step (accounts usually share one settings.json).
+    func trackLimitsEverywhere() {
+        guard installBinariesIfNeeded() else { return }
+        let setup = Setup(env: env)
+        let failed = profiles.filter { statuslineOn[$0.id] != true }.map { setup.connectStatusline(for: $0) }.filter { !$0.ok }
+        refreshLocal()
+        if let f = failed.first {
+            show(.error, f.detail)
+        } else {
+            show(.success, "Limit tracking is on. Each account's limits appear after its next Claude reply.")
         }
     }
 

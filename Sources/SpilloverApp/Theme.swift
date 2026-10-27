@@ -127,6 +127,12 @@ enum TypeScale {
 
 /// Text formatting shared by every screen.
 enum Fmt {
+    /// "A", "A and B", "A, B and C".
+    static func list(_ items: [String]) -> String {
+        guard items.count > 1 else { return items.first ?? "" }
+        return items.dropLast().joined(separator: ", ") + " and " + items.last!
+    }
+
     static func shortFolder(_ path: String) -> String {
         let home = NSHomeDirectory()
         if path == home { return "~" }
@@ -161,8 +167,9 @@ enum Fmt {
     }
 
     /// Time to a window's reset, or a dash when nothing is used (the window has not started).
-    static func reset(_ w: UsageWindow?, now: Date) -> (value: String, caption: String) {
-        guard let w else { return ("–", "no reading") }
+    /// `missing` says why there is no reading yet.
+    static func reset(_ w: UsageWindow?, now: Date, missing: String = "no reading") -> (value: String, caption: String) {
+        guard let w else { return ("–", missing) }
         if w.effectivePercentage(at: now) <= 0 { return ("–", "not started") }
         return (countdown(to: w.resetsAt, now: now), "to reset")
     }

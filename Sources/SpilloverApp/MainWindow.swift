@@ -61,6 +61,9 @@ struct MainWindow: View {
         }
         .navigationTitle("")
         .frame(minWidth: 860, minHeight: 600)
+        .tint(Ink.data)
+        .onAppear { DockPresence.windowDidOpen() }
+        .onDisappear { DockPresence.windowDidClose() }
     }
 
     /// Sidebar on the frame: the product, then sections. The active row is a neutral pill.

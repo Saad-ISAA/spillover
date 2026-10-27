@@ -90,22 +90,42 @@ public struct StatuslineInstaller {
         else { return }
         var chain = loadChain()
         let updated: String
-        if let original = chain.originals[profile.id] {
+        if let original = original(for: profile, in: chain) {
             updated = doc.settingRaw(original, forKey: Self.key)
         } else {
             updated = doc.removing(key: Self.key)
         }
         try SafeFS.writeAtomic(Data(updated.utf8), to: url, mode: nil)
-        chain.originals.removeValue(forKey: profile.id)
+        // The file is restored for every profile that shares it.
+        for id in sharingProfileIDs(with: profile) { chain.originals.removeValue(forKey: id) }
         try saveChain(chain)
     }
 
     /// The user's original statusline command for this profile, if it was a command.
     public func chainedCommand(profileId: String) -> String? {
-        guard let command = Self.command(inRaw: loadChain().originals[profileId]), !command.isEmpty,
+        guard let profile = profiles().first(where: { $0.id == profileId }),
+            let command = Self.command(inRaw: original(for: profile, in: loadChain())), !command.isEmpty,
             command != commandString
         else { return nil }
         return command
+    }
+
+    /// The statusline a profile had before Spillover. Profiles that share one settings.json share
+    /// it, and it was recorded under whichever of them was connected first.
+    private func original(for profile: Profile, in chain: Chain) -> String? {
+        if let own = chain.originals[profile.id] { return own }
+        return sharingProfileIDs(with: profile).lazy.compactMap { chain.originals[$0] }.first
+    }
+
+    /// Profiles whose settings.json is the same file as `profile`'s (itself included).
+    private func sharingProfileIDs(with profile: Profile) -> [String] {
+        let file = settingsURL(for: profile).resolvingSymlinksInPath().path
+        let others = profiles().filter { settingsURL(for: $0).resolvingSymlinksInPath().path == file }.map(\.id)
+        return others.contains(profile.id) ? others : [profile.id] + others
+    }
+
+    private func profiles() -> [Profile] {
+        (try? ProfileStore(env: env).all()) ?? [Profile.builtInDefault()]
     }
 
     private func loadChain() -> Chain {

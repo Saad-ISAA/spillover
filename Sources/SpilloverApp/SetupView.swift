@@ -76,6 +76,8 @@ struct SetupView: View {
                         .disabled(!Preferences.isBundled)
                     Rule()
                     switchLine("Show the fullest limit next to the menu bar icon", isOn: $prefs.showPercentInMenuBar)
+                    Rule()
+                    switchLine("Keep Spillover in the Dock when its window is closed", isOn: $prefs.alwaysInDock)
                 }
                 if !Preferences.isBundled {
                     Text("Login item and notifications need the app bundle (scripts/build-app.sh).")
@@ -229,17 +231,11 @@ private struct AutoSettings: View {
         HStack {
             Text("Move on when an account reaches").font(TypeScale.body).foregroundStyle(Ink.text)
             Spacer()
-            Picker("Threshold", selection: Binding(
-                get: { Int(model.autoPolicy.threshold) },
-                set: { v in model.updateAutoPolicy { $0.threshold = Double(v) } })
-            ) {
-                Text("80%").tag(80)
-                Text("90%").tag(90)
-                Text("95%").tag(95)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
+            Segmented(
+                options: [(80, "80%"), (90, "90%"), (95, "95%")],
+                selection: Binding(
+                    get: { Int(model.autoPolicy.threshold) },
+                    set: { v in model.updateAutoPolicy { $0.threshold = Double(v) } }))
         }
         Text("Also when its limit is forecast to run out within \(Int(model.autoPolicy.runOutMinutes)) minutes.")
             .font(TypeScale.meta).foregroundStyle(Ink.faint)

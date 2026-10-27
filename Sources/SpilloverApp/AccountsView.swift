@@ -187,7 +187,7 @@ private struct AccountCard: View {
                 }
             }
         } message: {
-            Text("Its folders go back to the Default account. The saved login stays in Keychain until you log out.")
+            Text("Its folders go back to \(model.defaultName). The saved login stays in Keychain until you log out.")
         }
     }
 
@@ -213,39 +213,31 @@ private struct AccountCard: View {
         HStack(spacing: 8) {
             switch model.statuses[profile.id] ?? .unknown {
             case .loggedIn:
-                Menu("Login") {
-                    Button("Log in again…") { model.logIn(profile) }
-                    Button("Log out") { model.logOut(profile) }
+                Dropdown(title: "Login", look: .chip) {
+                    [.action("Log in again…") { model.logIn(profile) }, .action("Log out") { model.logOut(profile) }]
                 }
-                .menuStyle(.button)
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .fixedSize()
             default:
                 Button("Log in…") { model.logIn(profile) }
                     .buttonStyle(PrimaryButtonStyle())
             }
-            if !profile.isDefault {
-                Menu {
-                    Button("Rename") {
+            Dropdown(title: "More", look: .icon("ellipsis")) {
+                var items: [DropdownItem] = [
+                    .action("Rename") {
                         newName = profile.displayName
                         renaming = true
-                    }
-                    if let dir = profile.configDir {
-                        Button("Show folder in Finder") { model.revealInFinder(dir) }
-                        Button("Open Terminal on this account") {
-                            model.openShell(profile, in: NSHomeDirectory())
-                        }
-                    }
-                    Divider()
-                    Button("Remove…", role: .destructive) { confirmRemove = true }
-                } label: {
-                    Image(systemName: "ellipsis")
+                    },
+                    .action("Show folder in Finder") {
+                        model.revealInFinder(profile.configDir ?? model.env.paths.defaultClaudeDir.path)
+                    },
+                ]
+                if !profile.isDefault {
+                    items.append(.action("Open Terminal on this account") {
+                        model.openShell(profile, in: NSHomeDirectory())
+                    })
+                    items.append(.divider)
+                    items.append(.action("Remove…") { confirmRemove = true })
                 }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .help("More")
+                return items
             }
         }
     }
@@ -310,12 +302,7 @@ struct AddAccountSheet: View {
                 TextField("Work", text: $name).textFieldStyle(.roundedBorder)
             }
 
-            Picker("", selection: $mode) {
-                Text("New login").tag(0)
-                Text("Existing config folder").tag(1)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            Segmented(options: [(0, "New login"), (1, "Existing config folder")], selection: $mode)
 
             if mode == 0 {
                 VStack(alignment: .leading, spacing: 8) {

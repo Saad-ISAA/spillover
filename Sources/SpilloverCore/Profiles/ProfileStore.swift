@@ -6,6 +6,8 @@ public final class ProfileStore {
     private struct File: Codable {
         var version: Int
         var profiles: [Profile]
+        /// The name the user gave the built-in Default profile (absent: "Default").
+        var defaultName: String?
     }
 
     private let env: SBEnvironment
@@ -19,7 +21,10 @@ public final class ProfileStore {
 
     /// Default first, then stored profiles in creation order.
     public func all() throws -> [Profile] {
-        [Profile.builtInDefault()] + (try load())
+        let file = try loadFile()
+        var builtIn = Profile.builtInDefault()
+        if let name = file.defaultName { builtIn.displayName = name }
+        return [builtIn] + file.profiles
     }
 
     public func profile(id: String) throws -> Profile? {
@@ -82,12 +87,16 @@ public final class ProfileStore {
     public func rename(id: String, to newName: String) throws {
         let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { throw ProfileError.invalidName }
-        if id == Profile.defaultID { throw ProfileError.cannotRemoveDefault }
         try locked {
-            var stored = try load()
-            guard let i = stored.firstIndex(where: { $0.id == id }) else { throw ProfileError.notFound(id) }
-            stored[i].displayName = name
-            try save(stored)
+            var file = try loadFile()
+            if id == Profile.defaultID {
+                // Only the name is stored; Default keeps its unset config directory.
+                file.defaultName = name == Profile.builtInDefault().displayName ? nil : name
+            } else {
+                guard let i = file.profiles.firstIndex(where: { $0.id == id }) else { throw ProfileError.notFound(id) }
+                file.profiles[i].displayName = name
+            }
+            try save(file)
         }
     }
 
@@ -137,6 +146,10 @@ public final class ProfileStore {
     }
 
     private func load() throws -> [Profile] {
+        try loadFile().profiles
+    }
+
+    private func loadFile() throws -> File {
         let url = paths.profilesFile
         // profiles.json decides which config directory Claude runs with, so it gets the same
         // ownership checks as routes.json.
@@ -145,7 +158,7 @@ public final class ProfileStore {
         {
             throw ProfileError.registryCorrupt(problem)
         }
-        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+        guard FileManager.default.fileExists(atPath: url.path) else { return File(version: 1, profiles: []) }
         let data: Data
         do { data = try Data(contentsOf: url) } catch {
             throw ProfileError.registryCorrupt("\(error.localizedDescription)")
@@ -163,7 +176,7 @@ public final class ProfileStore {
                     throw ProfileError.registryCorrupt("profile '\(p.id)' has no absolute directory")
                 }
             }
-            return file.profiles
+            return file
         } catch let e as ProfileError {
             throw e
         } catch {
@@ -172,10 +185,16 @@ public final class ProfileStore {
     }
 
     private func save(_ profiles: [Profile]) throws {
+        var file = try loadFile()
+        file.profiles = profiles
+        try save(file)
+    }
+
+    private func save(_ file: File) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
-        let data = try encoder.encode(File(version: 1, profiles: profiles))
+        let data = try encoder.encode(file)
         try SafeFS.ensureDir(paths.root)
         try SafeFS.writeAtomic(data, to: paths.profilesFile)
     }

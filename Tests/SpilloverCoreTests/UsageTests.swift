@@ -92,6 +92,27 @@ final class StatuslineInstallerTests: XCTestCase {
         XCTAssertTrue(box.read(shared).contains("statusline"))
     }
 
+    func testSharedSettingsKeepTheOriginalForEveryProfile() throws {
+        let box = try Sandbox()
+        try box.fakeExecutable(".spillover/bin/spillover")
+        let original = "{\n  \"statusLine\": {\"type\": \"command\", \"command\": \"mine\"}\n}"
+        let shared = try box.write(".claude/settings.json", original)
+        let work = try ProfileStore(env: box.env).create(displayName: "work")
+        try ProfileSharing(env: box.env).share("settings.json", from: .builtInDefault(), to: work)
+        let installer = StatuslineInstaller(env: box.env)
+
+        // Connected through one profile, the original is found for all that share the file.
+        try installer.install(for: work)
+        try installer.install(for: .builtInDefault())
+        XCTAssertEqual(installer.chainedCommand(profileId: "work"), "mine")
+        XCTAssertEqual(installer.chainedCommand(profileId: Profile.defaultID), "mine")
+
+        // Disconnected through the other one, the file gets the original back, not nothing.
+        try installer.uninstall(for: .builtInDefault())
+        XCTAssertEqual(box.read(shared), original)
+        XCTAssertFalse(installer.isInstalled(for: work))
+    }
+
     func testRequiresInstalledCLI() throws {
         let box = try Sandbox()
         XCTAssertThrowsError(try StatuslineInstaller(env: box.env).install(for: .builtInDefault()))

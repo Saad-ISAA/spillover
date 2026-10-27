@@ -18,9 +18,8 @@ enum DemoRender {
                     .background(scheme == .dark ? Color(white: 0.09) : Color.white)
                 write(view, to: out.appendingPathComponent("popover-\(name).png"), appearance: scheme == .dark ? .darkAqua : .aqua)
             }
-            let states: [(String, Double?, Double?)] = [("none", nil, nil), ("calm", 35, 10), ("spilling", 92, 18)]
-            for (name, fullest, roomiest) in states {
-                let glyph = Image(nsImage: MenuBarGlyph.image(fullest: fullest, roomiest: roomiest))
+            for (name, alert) in [("calm", false), ("alert", true)] {
+                let glyph = Image(nsImage: MenuBarGlyph.image(alert: alert))
                     .renderingMode(.template).foregroundStyle(.black).frame(width: 18, height: 18)
                     .padding(4).background(Color.white)
                 write(glyph, to: out.appendingPathComponent("glyph-\(name).png"), appearance: .aqua, scale: 6)

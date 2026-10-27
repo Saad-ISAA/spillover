@@ -11,6 +11,16 @@ struct OverviewView: View {
         Page(title: "Overview", subtitle: subtitle(finding), subtitleTone: finding?.tone ?? .neutral) {
             AssignFolderMenu(bordered: true)
         } content: {
+            let untracked = model.profiles.filter { model.statuslineOn[$0.id] != true }
+            if !untracked.isEmpty {
+                Notice(
+                    icon: "gauge.with.dots.needle.33percent", tone: .data,
+                    text: "Limit tracking is off for \(Fmt.list(untracked.map(\.displayName))). Spillover reads limits from Claude's statusline; your own statusline keeps working."
+                ) {
+                    Button("Turn on limit tracking") { model.trackLimitsEverywhere() }
+                        .buttonStyle(PrimaryButtonStyle())
+                }
+            }
             // Column count follows the number of accounts: all in one row when they fit, else
             // two per row, so no face is left alone in a row of empty cells.
             ViewThatFits(in: .horizontal) {
@@ -49,7 +59,7 @@ struct OverviewView: View {
         if let last = model.lastCapture {
             return "Every account has room at its current pace. Limits last reported \(Fmt.relative(last, now: model.now))."
         }
-        return "Limits appear here after each account's next Claude reply. Turn on limit tracking under Usage."
+        return "Limits appear here after each account's next Claude reply."
     }
 
     // MARK: Pace
@@ -61,13 +71,7 @@ struct OverviewView: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text("Pace · \(p.displayName)").font(TypeScale.section).foregroundStyle(Ink.text)
                     Spacer()
-                    Picker("Window", selection: $chartKind) {
-                        Text("This week").tag(UsageWindow.Kind.sevenDay)
-                        Text("This session").tag(UsageWindow.Kind.fiveHour)
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .fixedSize()
+                    Segmented(options: [(.sevenDay, "This week"), (.fiveHour, "This session")], selection: $chartKind)
                 }
                 if let w = model.window(chartKind, for: p) {
                     if let f = model.forecast(chartKind, for: p) {
@@ -209,7 +213,7 @@ private struct AccountFace: View {
     }
 
     private func gauge(_ w: UsageWindow?, kind: UsageWindow.Kind, caption: String) -> some View {
-        let reset = Fmt.reset(w, now: model.now)
+        let reset = Fmt.reset(w, now: model.now, missing: model.statuslineOn[profile.id] == true ? "after next reply" : "tracking off")
         return VStack(spacing: 6) {
             LoadArc(
                 percent: w.map { $0.effectivePercentage(at: model.now) },
