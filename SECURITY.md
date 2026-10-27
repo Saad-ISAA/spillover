@@ -4,13 +4,13 @@
 
 Please report security issues privately through GitHub's **Report a vulnerability** (Security
 advisories) on this repository rather than in a public issue. Include steps to reproduce and the
-version (`switchboard version`). We aim to acknowledge reports within a week.
+version (`spillover version`). We aim to acknowledge reports within a week.
 
 Never include real tokens, Keychain contents or personal data in a report.
 
 ## Design summary
 
-- Switchboard never reads, copies or stores login tokens. It only checks whether a Keychain item
+- Spillover never reads, copies or stores login tokens. It only checks whether a Keychain item
   with a given name exists.
 - It makes no network requests.
 - Its files are owner-only; if they become writable by others, every Claude launch is refused until

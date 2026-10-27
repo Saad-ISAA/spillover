@@ -1,42 +1,42 @@
 // swift-tools-version:6.0
 import PackageDescription
 
-// Layering (one-way): SwitchboardCore <- switchboard (CLI), switchboard-launch, SwitchboardApp.
-// All logic lives in SwitchboardCore; the executables are thin. See docs/architecture.md.
+// Layering (one-way): SpilloverCore <- spillover (CLI), spillover-launch, SpilloverApp.
+// All logic lives in SpilloverCore; the executables are thin. See docs/architecture.md.
 let package = Package(
-    name: "Switchboard",
+    name: "Spillover",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "SwitchboardCore", targets: ["SwitchboardCore"]),
-        .executable(name: "switchboard", targets: ["switchboard"]),
-        .executable(name: "switchboard-launch", targets: ["switchboard-launch"]),
-        .executable(name: "SwitchboardApp", targets: ["SwitchboardApp"]),
+        .library(name: "SpilloverCore", targets: ["SpilloverCore"]),
+        .executable(name: "spillover", targets: ["spillover"]),
+        .executable(name: "spillover-launch", targets: ["spillover-launch"]),
+        .executable(name: "SpilloverApp", targets: ["SpilloverApp"]),
     ],
     targets: [
         .target(
-            name: "SwitchboardCore",
-            path: "Sources/SwitchboardCore",
+            name: "SpilloverCore",
+            path: "Sources/SpilloverCore",
             linkerSettings: [.linkedLibrary("sqlite3")]
         ),
         .executableTarget(
-            name: "switchboard",
-            dependencies: ["SwitchboardCore"],
-            path: "Sources/switchboard"
+            name: "spillover",
+            dependencies: ["SpilloverCore"],
+            path: "Sources/spillover"
         ),
         .executableTarget(
-            name: "switchboard-launch",
-            dependencies: ["SwitchboardCore"],
-            path: "Sources/switchboard-launch"
+            name: "spillover-launch",
+            dependencies: ["SpilloverCore"],
+            path: "Sources/spillover-launch"
         ),
         .executableTarget(
-            name: "SwitchboardApp",
-            dependencies: ["SwitchboardCore"],
-            path: "Sources/SwitchboardApp"
+            name: "SpilloverApp",
+            dependencies: ["SpilloverCore"],
+            path: "Sources/SpilloverApp"
         ),
         .testTarget(
-            name: "SwitchboardCoreTests",
-            dependencies: ["SwitchboardCore"],
-            path: "Tests/SwitchboardCoreTests"
+            name: "SpilloverCoreTests",
+            dependencies: ["SpilloverCore"],
+            path: "Tests/SpilloverCoreTests"
         ),
     ],
     swiftLanguageModes: [.v5]

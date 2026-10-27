@@ -2,8 +2,9 @@
 //   swift scripts/make-icon.swift <output.iconset>
 // then: iconutil -c icns <output.iconset>
 //
-// The mark: three concentric open meters (270°, gap at the bottom), one per subscription, each
-// wired back to a single routing node in the gap. Flat colour on a matte face.
+// The mark: two cups in a cascade. The raised one is full and pours over its rim into the lower
+// one, which still has room: work spilling over to the account with room. Flat colour on a matte
+// face.
 import AppKit
 
 let out = URL(fileURLWithPath: CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "AppIcon.iconset")
@@ -13,11 +14,6 @@ func color(_ hex: UInt32) -> NSColor {
     NSColor(
         srgbRed: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255,
         blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
-}
-
-func point(_ c: NSPoint, _ r: CGFloat, _ degrees: CGFloat) -> NSPoint {
-    let a = degrees * .pi / 180
-    return NSPoint(x: c.x + r * cos(a), y: c.y + r * sin(a))
 }
 
 func render(_ size: CGFloat) -> NSBitmapImageRep {
@@ -34,43 +30,62 @@ func render(_ size: CGFloat) -> NSBitmapImageRep {
     color(0x141517).setFill()
     NSBezierPath(roundedRect: rect, xRadius: rect.width * 0.225, yRadius: rect.width * 0.225).fill()
 
-    // Three subscriptions as three concentric open meters, each wired from its start back to one
-    // routing node in the gap at the bottom: one switchboard, several metered lines.
-    let c = NSPoint(x: rect.midX, y: rect.midY + rect.height * 0.04)
-    let width = rect.width * 0.062
-    let gap = width * 1.75
-    let outer = rect.width * 0.33
-    let start: CGFloat = 225, sweep: CGFloat = 270
-    let fills: [CGFloat] = [0.78, 0.52, 0.30]
-    let node = NSPoint(x: c.x, y: c.y - outer * 0.98)
-    let ink = color(0xF3F2EE)
+    // Two open cups in a cascade: the raised one is full and pours over its rim into the lower
+    // one, which still has room.
+    let s = rect.width
+    let ox = rect.minX, oy = rect.minY
+    let w = s * 0.27, h = s * 0.29, wall = s * 0.042, r = s * 0.075
+    let teal = color(0x4DB6CC), ink = color(0xEDECE8)
 
-    for (i, fill) in fills.enumerated() {
-        let r = outer - CGFloat(i) * gap
-        func arc(to f: CGFloat, _ stroke: NSColor) {
-            let p = NSBezierPath()
-            p.appendArc(withCenter: c, radius: r, startAngle: start, endAngle: start - sweep * f, clockwise: true)
-            p.lineWidth = width
-            p.lineCapStyle = .round
-            stroke.setStroke()
-            p.stroke()
+    func cup(x: CGFloat, y: CGFloat, fill: CGFloat) {
+        // Liquid first, inside the walls.
+        let inner = NSRect(x: x + wall * 0.5, y: y + wall * 0.5, width: w - wall, height: (h - wall * 0.5) * fill)
+        teal.setFill()
+        NSBezierPath(roundedRect: inner, xRadius: r - wall * 0.5, yRadius: r - wall * 0.5).fill()
+        if fill < 1 {
+            // Square the liquid's surface.
+            NSRect(x: inner.minX, y: inner.minY + r, width: inner.width, height: max(0, inner.height - r)).fill()
         }
-        arc(to: 1, color(0x2A2C31))
-        arc(to: fill, i == 0 ? color(0x4DB6CC) : (i == 1 ? color(0x3A93A6) : color(0x2C7383)))
-
-        // The wire from the node to this meter's start.
-        let wire = NSBezierPath()
-        let a = point(c, r, start)
-        wire.move(to: node)
-        wire.curve(to: a, controlPoint1: NSPoint(x: node.x - (node.x - a.x) * 0.15, y: node.y), controlPoint2: NSPoint(x: a.x, y: a.y - (a.y - node.y) * 0.55))
-        wire.lineWidth = max(1, width * 0.28)
-        wire.lineCapStyle = .round
+        let outline = NSBezierPath()
+        outline.move(to: NSPoint(x: x, y: y + h))
+        outline.line(to: NSPoint(x: x, y: y + r))
+        outline.appendArc(withCenter: NSPoint(x: x + r, y: y + r), radius: r, startAngle: 180, endAngle: 270)
+        outline.line(to: NSPoint(x: x + w - r, y: y))
+        outline.appendArc(withCenter: NSPoint(x: x + w - r, y: y + r), radius: r, startAngle: 270, endAngle: 360)
+        outline.line(to: NSPoint(x: x + w, y: y + h))
+        outline.lineWidth = wall
+        outline.lineCapStyle = .round
+        outline.lineJoinStyle = .round
         ink.setStroke()
-        wire.stroke()
+        outline.stroke()
     }
-    let n = width * 0.8
-    ink.setFill()
-    NSBezierPath(ovalIn: NSRect(x: node.x - n, y: node.y - n, width: n * 2, height: n * 2)).fill()
+
+    let upper = NSPoint(x: ox + s * 0.15, y: oy + s * 0.47)
+    let lower = NSPoint(x: ox + s * 0.56, y: oy + s * 0.17)
+    cup(x: upper.x, y: upper.y, fill: 1.0)
+    cup(x: lower.x, y: lower.y, fill: 0.42)
+
+    // The spill: a crest over the upper cup's rim, then a stream into the lower cup.
+    let crest = NSBezierPath()
+    crest.move(to: NSPoint(x: upper.x + wall * 0.5, y: upper.y + h - wall * 0.2))
+    crest.curve(
+        to: NSPoint(x: upper.x + w + wall * 0.2, y: upper.y + h + wall * 0.25),
+        controlPoint1: NSPoint(x: upper.x + w * 0.3, y: upper.y + h + s * 0.05),
+        controlPoint2: NSPoint(x: upper.x + w * 0.8, y: upper.y + h + s * 0.06))
+    crest.line(to: NSPoint(x: upper.x + wall * 0.5, y: upper.y + h - wall * 0.2))
+    teal.setFill()
+    crest.fill()
+
+    let stream = NSBezierPath()
+    stream.move(to: NSPoint(x: upper.x + w + wall * 0.1, y: upper.y + h + wall * 0.1))
+    stream.curve(
+        to: NSPoint(x: lower.x + w * 0.5, y: lower.y + h * 0.42),
+        controlPoint1: NSPoint(x: upper.x + w + s * 0.11, y: upper.y + h + s * 0.03),
+        controlPoint2: NSPoint(x: lower.x + w * 0.5, y: lower.y + h + s * 0.04))
+    stream.lineWidth = s * 0.05
+    stream.lineCapStyle = .round
+    teal.setStroke()
+    stream.stroke()
 
     NSGraphicsContext.restoreGraphicsState()
     return rep

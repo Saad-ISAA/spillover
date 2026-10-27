@@ -1,6 +1,6 @@
 # Threat model
 
-## What Switchboard protects
+## What Spillover protects
 
 1. **Subscription credentials.** Claude Code's OAuth logins live in the macOS Keychain, one item per
    config directory. Losing one means account takeover.
@@ -8,19 +8,19 @@
    assigned. Silently using another account is a correctness and, for team plans, a compliance
    failure.
 3. **The user's tool configuration.** VS Code settings, shell startup files and Claude settings
-   belong to the user and must survive Switchboard being installed, updated and removed.
+   belong to the user and must survive Spillover being installed, updated and removed.
 
 ## Trust boundaries
 
 ```text
-User ──► Switchboard app / CLI ──► ~/.switchboard (owner-only files)
+User ──► Spillover app / CLI ──► ~/.spillover (owner-only files)
                                    │
-VS Code extension ──► switchboard-launch ──► reads routes/profiles ──► execs real Claude
+VS Code extension ──► spillover-launch ──► reads routes/profiles ──► execs real Claude
 Terminal shell ─────► shims/claude ──────┘
-Claude Code ──► switchboard statusline (stdin JSON) ──► usage/<profile>.json
+Claude Code ──► spillover statusline (stdin JSON) ──► usage/<profile>.json
 ```
 
-- Switchboard runs entirely as the user. It has no daemon, no privileged helper and no network
+- Spillover runs entirely as the user. It has no daemon, no privileged helper and no network
   access.
 - The launcher runs on **every** Claude start, so whatever it reads (routes, profiles, its own
   binary) is security-relevant.
@@ -29,8 +29,8 @@ Claude Code ──► switchboard statusline (stdin JSON) ──► usage/<profi
 
 | Threat | Control | Where |
 | --- | --- | --- |
-| Switchboard leaks a token (log, crash, UI) | Never reads Keychain item data; only checks item names. Launch log records no arguments. One redaction function for log text. | `KeychainSlot.swift`, `LaunchLog.swift`, `Redaction.swift` |
-| Another local user edits routes to swap accounts | Routes and the Switchboard folder must be owned by the user and not group/world-writable; otherwise every launch is refused. | `RouteStore.load` |
+| Spillover leaks a token (log, crash, UI) | Never reads Keychain item data; only checks item names. Launch log records no arguments. One redaction function for log text. | `KeychainSlot.swift`, `LaunchLog.swift`, `Redaction.swift` |
+| Another local user edits routes to swap accounts | Routes and the Spillover folder must be owned by the user and not group/world-writable; otherwise every launch is refused. | `RouteStore.load` |
 | Another local user replaces the launcher | Launcher lives in a `0700` folder; Health reports ownership/permission problems. | `SafeFS`, `Doctor` |
 | A broken assignment silently bills another subscription | Fail closed: a routed folder whose profile or directory is missing refuses to start. Unrouted folders are untouched by design. | `Resolver`, `LaunchPlanner` |
 | Launch loop (shim executes itself) | Locator excludes the launcher and the shims folder by real path. | `RealClaudeLocator` |
@@ -44,6 +44,6 @@ Claude Code ──► switchboard statusline (stdin JSON) ──► usage/<profi
 ## Out of scope
 
 - A local attacker running as the same user (they can read the Keychain through Claude Code itself).
-- Remote development hosts (SSH, containers): Claude runs there, outside Switchboard.
-- Provider terms of service: Switchboard manages accounts you own; it does not rotate accounts to
+- Remote development hosts (SSH, containers): Claude runs there, outside Spillover.
+- Provider terms of service: Spillover manages accounts you own; it does not rotate accounts to
   get around limits.

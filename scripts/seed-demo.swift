@@ -1,4 +1,4 @@
-// Fills a throwaway HOME with sample Switchboard state so every screen can be looked at without
+// Fills a throwaway HOME with sample Spillover state so every screen can be looked at without
 // real accounts: three accounts plus Default, assigned folders, limit readings with a week of
 // history, and a month of session-log token counts. All names and numbers are made up.
 //
@@ -15,7 +15,7 @@ guard args.count > 1 else {
 }
 let home = URL(fileURLWithPath: args[1], isDirectory: true)
 let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-let cli = root.appendingPathComponent(".build/debug/switchboard").path
+let cli = root.appendingPathComponent(".build/debug/spillover").path
 let fm = FileManager.default
 
 func mkdir(_ path: String) -> URL {
@@ -36,8 +36,8 @@ func run(_ arguments: [String]) {
     p.arguments = arguments
     var env = ProcessInfo.processInfo.environment
     env["HOME"] = home.path
-    env.removeValue(forKey: "SWITCHBOARD_HOME")
-    env["SWITCHBOARD_REAL_CLAUDE"] = home.appendingPathComponent("bin/claude").path
+    env.removeValue(forKey: "SPILLOVER_HOME")
+    env["SPILLOVER_REAL_CLAUDE"] = home.appendingPathComponent("bin/claude").path
     p.environment = env
     p.standardOutput = FileHandle.nullDevice
     try! p.run()
@@ -111,7 +111,7 @@ for a in accounts {
          "windows":[{"kind":"five_hour","resetsAt":"\(iso.string(from: fiveReset))","usedPercentage":\(a.five)},
                     {"kind":"seven_day","resetsAt":"\(iso.string(from: sevenReset))","usedPercentage":\(a.seven)}]}
         """
-    write(snapshot, to: home.appendingPathComponent(".switchboard/usage/\(a.id).json"))
+    write(snapshot, to: home.appendingPathComponent(".spillover/usage/\(a.id).json"))
 
     // Weekly use grows only in working hours; each 5-hour window ramps from zero.
     let weekStart = sevenReset.addingTimeInterval(-7 * 86400)
@@ -132,10 +132,10 @@ for a in accounts {
             "{\"at\":\(Int(at.timeIntervalSince1970)),\"fiveHour\":\(String(format: "%.1f", max(0, min(five, 100)))),\"fiveHourResetsAt\":\(Int(windowReset.timeIntervalSince1970)),\"sevenDay\":\(String(format: "%.1f", seven)),\"sevenDayResetsAt\":\(Int(sevenReset.timeIntervalSince1970))}"
         )
     }
-    write("[" + points.joined(separator: ",") + "]", to: home.appendingPathComponent(".switchboard/usage/\(a.id).history.json"))
+    write("[" + points.joined(separator: ",") + "]", to: home.appendingPathComponent(".spillover/usage/\(a.id).history.json"))
 
     // Session logs: token counts only, spread over the last 30 days.
-    let configDir = a.id == "default" ? home.appendingPathComponent(".claude") : home.appendingPathComponent(".switchboard/profiles/\(a.id)")
+    let configDir = a.id == "default" ? home.appendingPathComponent(".claude") : home.appendingPathComponent(".spillover/profiles/\(a.id)")
     let mine: [String]
     switch a.id {
     case "work": mine = ["api-server", "billing-service"]
@@ -167,4 +167,4 @@ for a in accounts {
 }
 
 print("Seeded \(home.path)")
-print("Run the app against it: SWITCHBOARD_REAL_CLAUDE=\(home.path)/bin/claude scripts/demo-screenshot.sh \(home.path) popover out.png")
+print("Run the app against it: SPILLOVER_REAL_CLAUDE=\(home.path)/bin/claude scripts/demo-screenshot.sh \(home.path) popover out.png")

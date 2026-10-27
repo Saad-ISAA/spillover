@@ -1,12 +1,12 @@
 # Architecture
 
-Switchboard is one Swift package with a UI-free core library and three thin executables.
+Spillover is one Swift package with a UI-free core library and three thin executables.
 
 ```text
-SwitchboardCore (library, no UI)
- ├─ switchboard          CLI
- ├─ switchboard-launch   launcher that runs in place of Claude
- └─ SwitchboardApp       menu bar app (SwiftUI)
+SpilloverCore (library, no UI)
+ ├─ spillover          CLI
+ ├─ spillover-launch   launcher that runs in place of Claude
+ └─ SpilloverApp       menu bar app (SwiftUI)
 ```
 
 Dependencies point one way: executables depend on the core, never on each other. All rules live in
@@ -15,14 +15,14 @@ the core; the executables translate user input into core calls and print or draw
 ## Single owners
 
 Each concern has exactly one owner. Adding behaviour means extending that owner, not writing a
-second implementation elsewhere. `Tests/SwitchboardCoreTests/ArchitectureTests.swift` fails when a
+second implementation elsewhere. `Tests/SpilloverCoreTests/ArchitectureTests.swift` fails when a
 second implementation appears.
 
 | Concern | Owner | Enforced by |
 | --- | --- | --- |
 | Reading the process environment and well-known paths | `Config/SBEnvironment.swift` (`SBEnvironment`, `SBPaths`) | `testOnlyConfigReadsProcessEnvironment` |
 | Starting other processes | `Profiles/CommandRunner.swift` (`CommandRunning`) | `testOnlyCommandRunnerStartsProcesses` |
-| Replacing the process with Claude (`execve`) | `switchboard-launch/main.swift` | `testOnlyTheLauncherExecs` |
+| Replacing the process with Claude (`execve`) | `spillover-launch/main.swift` | `testOnlyTheLauncherExecs` |
 | How a profile changes Claude's environment | `Profiles/ProfileEnvironment.swift` | `testOnlyProfileEnvironmentNamesTheConfigVariable` |
 | Canonical paths | `Routing/PathNormalizer.swift` | used by every comparison |
 | Which folder a route covers | `Routing/RouteTable.swift` | `testOnlyRouteTableMatchesFolders` |
@@ -34,7 +34,7 @@ second implementation appears.
 | Which account an Auto folder gets | `Routing/AutoPolicy.swift` (policy and `auto.json`), called only by the resolver | `AutoPolicyTests` |
 | Moving a conversation's history between accounts | `Sessions/Conversations.swift` (`ConversationStore`) | `ConversationTests` |
 | Ending another process (a chat being moved) | `Sessions/SessionControl.swift` | `testOnlySessionControlSignalsProcesses` |
-| Network | none — Switchboard makes no requests | `testNoNetworkClients` |
+| Network | none — Spillover makes no requests | `testNoNetworkClients` |
 
 ## Registries
 
@@ -64,14 +64,14 @@ cwd ──► RouteStore.load()
                                     yes ───────► routed: apply ProfileEnvironment, exec real Claude
 ```
 
-`SWITCHBOARD_BYPASS=1` skips the decision. `RealClaudeLocator` never returns Switchboard's own
+`SPILLOVER_BYPASS=1` skips the decision. `RealClaudeLocator` never returns Spillover's own
 launcher or shim, so a launch cannot loop.
 
 ## Usage
 
 Claude Code passes `rate_limits` (5-hour, 7-day, spend limit) to the statusline command on stdin.
-`switchboard statusline` stores them per profile (`usage/<profile>.json`) and then runs the user's
-original statusline with the same input. Profile detection: `SWITCHBOARD_PROFILE` (set by the
+`spillover statusline` stores them per profile (`usage/<profile>.json`) and then runs the user's
+original statusline with the same input. Profile detection: `SPILLOVER_PROFILE` (set by the
 launcher), then `CLAUDE_CONFIG_DIR`, then Default.
 
 `LocalUsageScanner` reads `<profile>/projects/**/*.jsonl`, counting only usage fields, deduplicated
@@ -82,19 +82,19 @@ by message id.
 `Sessions/SessionScanner.swift` lists the user's own `claude` processes with `proc_listallpids`,
 `proc_pidpath`, `sysctl(KERN_PROCARGS2)` and `proc_pidinfo(PROC_PIDVNODEPATHINFO)`. While parsing a
 process's arguments it keeps exactly two environment variables (`CLAUDE_CONFIG_DIR`,
-`SWITCHBOARD_PROFILE`) and the conversation id (`--resume`), and discards the rest. Each session is
+`SPILLOVER_PROFILE`) and the conversation id (`--resume`), and discards the rest. Each session is
 compared with today's resolution of its folder to flag sessions that need moving after a
 reassignment (in Auto folders, only when their account ran low).
 
 ## Files written
 
-All under `~/.switchboard` (override with `SWITCHBOARD_HOME`), directories `0700`, files `0600`,
+All under `~/.spillover` (override with `SPILLOVER_HOME`), directories `0700`, files `0600`,
 written atomically:
 
 ```text
 profiles.json  routes.json  install-manifest.json  prices.json (user-provided)
 profiles/<id>/        isolated Claude config directories
-bin/                  switchboard-launch, switchboard
+bin/                  spillover-launch, spillover
 shims/claude          symlink to the launcher (PATH shim)
 logs/launch.log       one line per launch decision, no arguments
 backups/              editor settings before each edit
@@ -127,7 +127,7 @@ folder also moves its chats with their history. No login data is read, copied or
 | --- | --- |
 | Claude extension updated, window not reloaded | The old extension keeps running in that window. The launcher picks the Claude binary of the calling extension: the editor comes from its parent process (the extension host), the version from `CLAUDE_AGENT_SDK_VERSION`, whose last number matches the extension's (SDK 0.3.310 ↔ 2.1.310). Without it, the newest version the editor has not listed in `.obsolete` wins. |
 | Claude extension updated, window reloaded | Chats restart with `--resume`; the launcher routes them by folder and brings their history along. Health re-checks the extension's contract. |
-| Extension changes what Switchboard relies on | Health reports it: a missing wrapper setting (routing stops), or no reopen link (open chats can no longer be moved live; reloading the window still moves them with their history). Live moves are disabled for that editor instead of failing. |
+| Extension changes what Spillover relies on | Health reports it: a missing wrapper setting (routing stops), or no reopen link (open chats can no longer be moved live; reloading the window still moves them with their history). Live moves are disabled for that editor instead of failing. |
 | VS Code (or Cursor, ...) updated or restarted | The user setting persists; every chat restarts through the launcher on its folder's account, with history. |
 | Window closed while a move waits | The chat's process is gone; the move ends as "closed" and the chat continues on the new account, with its history, whenever it is reopened. |
 | Window closed and reopened later | Same as reload: resumed through the launcher, on the folder's current account. |
@@ -135,4 +135,4 @@ folder also moves its chats with their history. No login data is read, copied or
 | The app is not running | Routing, Auto at chat start and history handoff all happen in the launcher; only live moves and notifications need the app. |
 | Editor not connected | Live moves are refused with a pointer to Setup (a reopened chat would not change account). |
 | Terminal chats | Not moved automatically; they switch the next time `claude` starts in that folder. |
-| Remote windows (SSH, containers) | Not supported: Claude runs on the remote machine, outside Switchboard's reach. |
+| Remote windows (SSH, containers) | Not supported: Claude runs on the remote machine, outside Spillover's reach. |

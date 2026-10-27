@@ -4,9 +4,9 @@
 version: 1
 controls:
   - id: SB-SEC-01
-    title: Switchboard never reads, copies or stores Claude credentials
+    title: Spillover never reads, copies or stores Claude credentials
     status: enforced
-    owner: Sources/SwitchboardCore/Profiles/KeychainSlot.swift
+    owner: Sources/SpilloverCore/Profiles/KeychainSlot.swift
     tests:
       - ArchitectureTests.testKeychainIsNeverReadForSecrets
       - KeychainSlotTests.testProbeNeverAsksForSecrets
@@ -14,7 +14,7 @@ controls:
   - id: SB-SEC-02
     title: Text that reaches logs is scrubbed; launch log records no arguments
     status: enforced
-    owner: Sources/SwitchboardCore/Security/Redaction.swift
+    owner: Sources/SpilloverCore/Security/Redaction.swift
     tests:
       - RedactionTests
       - LaunchPlannerTests.testLaunchLogHasNoArguments
@@ -23,7 +23,7 @@ controls:
   - id: SB-SEC-03
     title: State files are owner-only and written atomically
     status: enforced
-    owner: Sources/SwitchboardCore/Security/SafeFS.swift
+    owner: Sources/SpilloverCore/Security/SafeFS.swift
     tests:
       - RouteStoreTests.testRoutesFileIsOwnerOnly
       - ProfileStoreTests.testCreateMakesOwnerOnlyDirectoryAndUniqueSlug
@@ -32,7 +32,7 @@ controls:
   - id: SB-SEC-04
     title: Tampered or unreadable routes refuse every launch
     status: enforced
-    owner: Sources/SwitchboardCore/Routing/RouteStore.swift
+    owner: Sources/SpilloverCore/Routing/RouteStore.swift
     tests:
       - RouteStoreTests.testWorldWritableFileIsInsecure
       - RouteStoreTests.testCorruptFileFailsClosed
@@ -41,7 +41,7 @@ controls:
   - id: SB-SEC-05
     title: A route that cannot be honoured never falls back to another account
     status: enforced
-    owner: Sources/SwitchboardCore/Routing/Resolver.swift
+    owner: Sources/SpilloverCore/Routing/Resolver.swift
     tests:
       - ResolverTests.testMissingProfileRefuses
       - ResolverTests.testMissingProfileDirectoryRefuses
@@ -50,7 +50,7 @@ controls:
   - id: SB-SEC-06
     title: Only one place decides the Claude environment for a profile
     status: enforced
-    owner: Sources/SwitchboardCore/Profiles/ProfileEnvironment.swift
+    owner: Sources/SpilloverCore/Profiles/ProfileEnvironment.swift
     tests:
       - ArchitectureTests.testOnlyProfileEnvironmentNamesTheConfigVariable
       - ProfileEnvironmentTests
@@ -58,7 +58,7 @@ controls:
   - id: SB-SEC-07
     title: Only the launcher replaces the process; only the command runner starts processes
     status: enforced
-    owner: Sources/switchboard-launch/main.swift, Sources/SwitchboardCore/Profiles/CommandRunner.swift
+    owner: Sources/spillover-launch/main.swift, Sources/SpilloverCore/Profiles/CommandRunner.swift
     tests:
       - ArchitectureTests.testOnlyTheLauncherExecs
       - ArchitectureTests.testOnlyCommandRunnerStartsProcesses
@@ -66,14 +66,14 @@ controls:
   - id: SB-SEC-08
     title: The launcher never executes itself (no loops through the shim)
     status: enforced
-    owner: Sources/SwitchboardCore/Launch/RealClaudeLocator.swift
+    owner: Sources/SpilloverCore/Launch/RealClaudeLocator.swift
     tests:
       - RealClaudeLocatorTests.testNeverReturnsOwnShim
 
   - id: SB-SEC-09
     title: Paths are never parsed by a shell; generated scripts quote every value
     status: enforced
-    owner: Sources/SwitchboardCore/Routing/PathNormalizer.swift, Sources/SwitchboardCore/Launch/TerminalLauncher.swift
+    owner: Sources/SpilloverCore/Routing/PathNormalizer.swift, Sources/SpilloverCore/Launch/TerminalLauncher.swift
     tests:
       - PathNormalizerTests.testSpacesAndOddCharactersSurvive
       - ShellTests.testShellQuote
@@ -82,7 +82,7 @@ controls:
   - id: SB-SEC-10
     title: Editor settings edits are minimal, verified, backed up and exactly reversible
     status: enforced
-    owner: Sources/SwitchboardCore/Integrations/VSCodeInstaller.swift
+    owner: Sources/SpilloverCore/Integrations/VSCodeInstaller.swift
     tests:
       - VSCodeInstallerTests
       - JSONCDocumentTests
@@ -90,7 +90,7 @@ controls:
   - id: SB-SEC-11
     title: Login, credential and history files are never shared between accounts
     status: enforced
-    owner: Sources/SwitchboardCore/Profiles/ProfileSharing.swift
+    owner: Sources/SpilloverCore/Profiles/ProfileSharing.swift
     tests:
       - ProfileSharingTests.testShareLinksAndRefusesSecrets
       - ProfileSharingTests.testNeverShareWinsOverShareable
@@ -105,21 +105,21 @@ controls:
   - id: SB-SEC-13
     title: Extension contract drift is detected
     status: enforced
-    owner: Sources/SwitchboardCore/Integrations/ExtensionContract.swift
+    owner: Sources/SpilloverCore/Integrations/ExtensionContract.swift
     tests:
       - ExtensionContractTests
 
   - id: SB-SEC-16
     title: Process inspection keeps only the two routing variables and the working directory
     status: enforced
-    owner: Sources/SwitchboardCore/Sessions/SessionScanner.swift
+    owner: Sources/SpilloverCore/Sessions/SessionScanner.swift
     tests:
       - SessionScannerTests.testParseKeepsOnlyTwoVariables
 
   - id: SB-SEC-17
-    title: profiles.json and the Switchboard folder get the same trust checks as routes.json
+    title: profiles.json and the Spillover folder get the same trust checks as routes.json
     status: enforced
-    owner: Sources/SwitchboardCore/Security/SafeFS.swift (trustProblem)
+    owner: Sources/SpilloverCore/Security/SafeFS.swift (trustProblem)
     tests:
       - RegressionTests.testWritableProfilesFileRefusesRoutedLaunch
       - RegressionTests.testWritableRootRefusesEvenWithoutRoutes
@@ -127,15 +127,15 @@ controls:
   - id: SB-SEC-18
     title: Registry and installer writes never clobber concurrent changes or symlinked files
     status: enforced
-    owner: Sources/SwitchboardCore/Security/SafeFS.swift (withLock, writeAtomic)
+    owner: Sources/SpilloverCore/Security/SafeFS.swift (withLock, writeAtomic)
     tests:
       - RegressionTests.testWritesFollowSymlinks
       - RegressionTests.testEnsureDirLeavesExistingFoldersAlone
 
   - id: SB-SEC-19
-    title: Uninstall can always restore a wrapper that existed before Switchboard
+    title: Uninstall can always restore a wrapper that existed before Spillover
     status: enforced
-    owner: Sources/SwitchboardCore/Integrations/VSCodeInstaller.swift
+    owner: Sources/SpilloverCore/Integrations/VSCodeInstaller.swift
     tests:
       - RegressionTests.testFailedUninstallKeepsRecord
       - RegressionTests.testAlreadyInstalledWithoutManifestDoesNotRecordItself
@@ -155,7 +155,7 @@ controls:
   - id: SB-SEC-20
     title: Only one module ends other processes, and only the chat it was pointed at
     status: enforced
-    owner: Sources/SwitchboardCore/Sessions/SessionControl.swift
+    owner: Sources/SpilloverCore/Sessions/SessionControl.swift
     notes: Re-reads the pid's executable, folder, conversation id and start time before SIGTERM, so a reused pid is never signalled. Chats are ended only between turns.
     tests:
       - ArchitectureTests.testOnlySessionControlSignalsProcesses
@@ -164,7 +164,7 @@ controls:
   - id: SB-SEC-21
     title: Conversation handoff copies files without reading them, owner-only
     status: enforced
-    owner: Sources/SwitchboardCore/Sessions/Conversations.swift
+    owner: Sources/SpilloverCore/Sessions/Conversations.swift
     notes: Ids are validated (hex and dashes only) before they name a file; symlinks are never copied; copies are 0600 in 0700 folders. Activity checks read only the record type and stop reason.
     tests:
       - ConversationTests.testConversationIDFromArguments
@@ -174,7 +174,7 @@ controls:
   - id: SB-SEC-22
     title: Auto folders fail closed when their settings cannot be trusted
     status: enforced
-    owner: Sources/SwitchboardCore/Routing/AutoPolicy.swift
+    owner: Sources/SpilloverCore/Routing/AutoPolicy.swift
     tests:
       - AutoPolicyTests.testUnreadableAutoSettingsFailClosed
 
