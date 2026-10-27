@@ -8,12 +8,35 @@ It lives in the menu bar and also shows each account's session and weekly limits
 
 - **Per-folder accounts** in a single, normal VS Code. No extra VS Code instances, no profile juggling.
 - **Every launch path**: the Claude Code editor panel, `claude` in VS Code's terminal, iTerm, Ghostty, Terminal.
-- **Usage at a glance**: 5-hour and weekly limits with reset countdowns for every account, plus token totals from local session logs. Optional notifications at 80% and 95%.
-- **Live sessions**: see every running Claude session, which account it is on, and which ones still use an old account after you reassigned their folder.
+- **Move open chats**: switch a VS Code window to another account and its chats move with their history, each after its current reply.
+- **Auto**: folders set to Auto start each chat on the account with the most room, and move open chats on when an account reaches its limit threshold (90% by default).
+- **Usage at a glance**: 5-hour and weekly limits for every account, checked every few minutes the way `/usage` does (no message sent), pace forecasts, and token totals from local session logs. Optional notifications at 80% and 95%.
+- **Live sessions**: every running Claude chat, which account it is on, and which ones still use an old account after you reassigned their folder.
+- **Light, dark or system** appearance, in the window and the menu bar.
 - **Safe by design**: it never reads, copies or stores a login token; every change to your editor or shell is backed up and can be undone with one button.
 - **Free and open source** (MIT). No account, no telemetry, no network requests of its own.
 
 > Status: early (0.1). macOS 14+. Claude Code first; Codex and other tools are planned.
+
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/popover-light.png" width="280" alt="Menu bar popover in light mode: one tile per account with session and week rings, and a pace chart">
+  &nbsp;
+  <img src="docs/screenshots/popover-dark.png" width="280" alt="Menu bar popover in dark mode">
+</p>
+
+![Overview: every account's session and week limits, a pace forecast and the account with the most room](docs/screenshots/overview-light.png)
+
+![Overview in dark mode](docs/screenshots/overview-dark.png)
+
+| Accounts | Folders |
+| --- | --- |
+| ![Accounts: each Claude login with its limits and assigned folders](docs/screenshots/accounts-light.png) | ![Folders: each project folder and the account it uses](docs/screenshots/folders-light.png) |
+| **Sessions** | **Usage** |
+| ![Sessions: every running chat and its account, with a move button for one on an old account](docs/screenshots/sessions-dark.png) | ![Usage: tokens per day, by model and by folder, and the limit history](docs/screenshots/usage-light.png) |
+
+All screenshots use made-up sample data (`scripts/seed-demo.swift`).
 
 ## How it works
 
