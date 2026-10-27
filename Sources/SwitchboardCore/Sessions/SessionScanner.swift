@@ -188,6 +188,9 @@ public struct SessionScanner {
         return Array(pids.prefix(Int(max(0, filled))))
     }
 
+    /// Path of the program running as `pid` (nil when it cannot be read).
+    public static func executable(of pid: Int32) -> String? { executablePath(pid) }
+
     private static func executablePath(_ pid: Int32) -> String? {
         var buffer = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
         let n = proc_pidpath(pid, &buffer, UInt32(buffer.count))

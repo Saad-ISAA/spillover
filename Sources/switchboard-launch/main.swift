@@ -17,7 +17,9 @@ let mode: LaunchMode = invokedAs == "claude" ? .shellShim : .editorWrapper
 let args = Array(CommandLine.arguments.dropFirst())
 let cwd = FileManager.default.currentDirectoryPath
 
-let request = LaunchRequest(mode: mode, cwd: cwd, args: args, environment: env.processEnv)
+let request = LaunchRequest(
+    mode: mode, cwd: cwd, args: args, environment: env.processEnv,
+    parentExecutable: SessionScanner.executable(of: getppid()))
 
 switch LaunchPlanner(env: env).plan(request) {
 case .refuse(let message):

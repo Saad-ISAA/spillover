@@ -156,9 +156,28 @@ private struct EditorRow: View {
     let editor: Editor
     @Binding var replaceTarget: Editor?
 
+    @ViewBuilder
+    private var contractLine: some View {
+        if let c = model.contracts[editor] {
+            switch c.finding {
+            case .extensionNotFound:
+                Text("Claude extension not installed").font(TypeScale.meta).foregroundStyle(Ink.faint)
+            case .wrapperSettingMissing:
+                Text("Claude \(c.extensionVersion ?? "") no longer offers the wrapper setting: routing stops")
+                    .font(TypeScale.meta).foregroundStyle(Ink.negative)
+            default:
+                Text("Claude \(c.extensionVersion ?? "") · " + (c.reopensChats ? "open chats can move" : "open chats move on window reload"))
+                    .font(TypeScale.meta).foregroundStyle(c.reopensChats ? Ink.faint : Ink.warning)
+            }
+        }
+    }
+
     var body: some View {
         HStack(spacing: 8) {
-            Text(editor.displayName).font(TypeScale.body).foregroundStyle(Ink.text)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(editor.displayName).font(TypeScale.body).foregroundStyle(Ink.text)
+                contractLine
+            }
             Spacer()
             switch model.editorStatus[editor] ?? .notInstalled {
             case .installed:

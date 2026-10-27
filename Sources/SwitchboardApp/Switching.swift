@@ -158,11 +158,18 @@ extension AppModel {
 
     private func startMove(_ a: SessionAssessment, automatic: Bool) {
         guard case .stale(let expectedID) = a.state, let target = profile(id: expectedID) else { return }
-        guard let id = a.session.conversationId, let cwd = a.session.cwd, let editor = a.session.editor,
-            let reopen = editor.claudeSessionURL(id)
-        else {
+        guard let cwd = a.session.cwd, let editor = a.session.editor else {
             if !automatic {
                 show(.info, "Terminal chats keep their account until you start them again (claude -r continues the last one).")
+            }
+            return
+        }
+        // The extension's side of a move: chats resumed by id, and a link that reopens one.
+        guard let id = a.session.conversationId, let reopen = editor.claudeSessionURL(id),
+            contracts[editor]?.reopensChats != false
+        else {
+            if !automatic {
+                show(.info, "This version of the Claude extension cannot reopen a chat for Switchboard. Reload the \(Fmt.folderName(cwd)) window instead: its chats restart on the new account with their history.")
             }
             return
         }

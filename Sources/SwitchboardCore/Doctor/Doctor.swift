@@ -189,8 +189,16 @@ public struct Doctor {
             out.append(check)
         }
 
-        let contract = ExtensionContract.check(
-            extensionsDir: env.home.appendingPathComponent(".vscode/extensions", isDirectory: true))
+        let contract = ExtensionContract.check(editor: .code, env: env)
+        if contract.finding != .extensionNotFound {
+            out.append(
+                HealthCheck(
+                    id: "extension-reopen", title: "Moving open chats",
+                    status: contract.reopensChats ? .ok : .warning,
+                    detail: contract.reopensChats
+                        ? "This extension version reopens chats from a link, so open chats can move to another account."
+                        : "This extension version does not reopen chats from a link. New chats still start on the folder's account; open chats keep theirs until you start a new chat or reload the window."))
+        }
         switch contract.finding {
         case .ok:
             out.append(

@@ -73,6 +73,11 @@ public enum Editor: String, CaseIterable, Codable, Sendable {
             .first { executable.contains("/\($0.extensionsDirectoryName)/extensions/") }
     }
 
+    /// The editor whose app bundle contains `appExecutable` (e.g. its extension host helper).
+    public static func owning(appExecutable: String) -> Editor? {
+        allCases.first { appExecutable.contains("/\($0.applicationName).app/") }
+    }
+
     /// Editors that have been run on this machine (their user settings directory exists).
     public static func installed(env: SBEnvironment) -> [Editor] {
         allCases.filter {

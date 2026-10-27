@@ -5,12 +5,17 @@ public struct LaunchRequest: Sendable {
     public var cwd: String
     public var args: [String]
     public var environment: [String: String]
+    /// The program that started the launcher (an editor's extension host), when known.
+    public var parentExecutable: String?
 
-    public init(mode: LaunchMode, cwd: String, args: [String], environment: [String: String]) {
+    public init(
+        mode: LaunchMode, cwd: String, args: [String], environment: [String: String], parentExecutable: String? = nil
+    ) {
         self.mode = mode
         self.cwd = cwd
         self.args = args
         self.environment = environment
+        self.parentExecutable = parentExecutable
     }
 }
 
@@ -65,7 +70,10 @@ public struct LaunchPlanner {
                 "switchboard: \(refusal.message)\n(Set SWITCHBOARD_BYPASS=1 to run Claude without routing.)")
         }
 
-        guard let executable = locator.locate(mode: request.mode, baseEnv: request.environment) else {
+        guard
+            let executable = locator.locate(
+                mode: request.mode, baseEnv: request.environment, parentExecutable: request.parentExecutable)
+        else {
             log.append(mode: request.mode, cwd: request.cwd, profile: "-", outcome: "refused:noClaude")
             return .refuse(
                 "switchboard: could not find the Claude executable. Install Claude Code or set SWITCHBOARD_REAL_CLAUDE."

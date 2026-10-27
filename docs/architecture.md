@@ -120,3 +120,19 @@ in each account's own config folder. A move therefore:
 
 The launcher does step 1 on every resumed launch, so reloading a window after reassigning its
 folder also moves its chats with their history. No login data is read, copied or changed.
+
+## Editor and extension lifecycle
+
+| Situation | What happens |
+| --- | --- |
+| Claude extension updated, window not reloaded | The old extension keeps running in that window. The launcher picks the Claude binary of the calling extension: the editor comes from its parent process (the extension host), the version from `CLAUDE_AGENT_SDK_VERSION`, whose last number matches the extension's (SDK 0.3.310 ↔ 2.1.310). Without it, the newest version the editor has not listed in `.obsolete` wins. |
+| Claude extension updated, window reloaded | Chats restart with `--resume`; the launcher routes them by folder and brings their history along. Health re-checks the extension's contract. |
+| Extension changes what Switchboard relies on | Health reports it: a missing wrapper setting (routing stops), or no reopen link (open chats can no longer be moved live; reloading the window still moves them with their history). Live moves are disabled for that editor instead of failing. |
+| VS Code (or Cursor, ...) updated or restarted | The user setting persists; every chat restarts through the launcher on its folder's account, with history. |
+| Window closed while a move waits | The chat's process is gone; the move ends as "closed" and the chat continues on the new account, with its history, whenever it is reopened. |
+| Window closed and reopened later | Same as reload: resumed through the launcher, on the folder's current account. |
+| Several windows on one folder | All of the folder's chats move; the reopen link goes to the window brought forward for that folder. |
+| The app is not running | Routing, Auto at chat start and history handoff all happen in the launcher; only live moves and notifications need the app. |
+| Editor not connected | Live moves are refused with a pointer to Setup (a reopened chat would not change account). |
+| Terminal chats | Not moved automatically; they switch the next time `claude` starts in that folder. |
+| Remote windows (SSH, containers) | Not supported: Claude runs on the remote machine, outside Switchboard's reach. |

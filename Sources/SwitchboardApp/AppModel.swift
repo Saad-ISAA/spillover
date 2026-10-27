@@ -58,6 +58,8 @@ final class AppModel: ObservableObject {
     @Published var selectedSection: MainSection? = .overview
     @Published var sessions: [SessionAssessment] = []
     @Published var autoPolicy = AutoPolicy()
+    /// What each installed editor's Claude extension supports (checked after updates too).
+    @Published var contracts: [Editor: ExtensionContract] = [:]
     /// Chats being moved to another account, by conversation id.
     @Published var moves: [String: ChatMove] = [:]
 
@@ -187,6 +189,19 @@ final class AppModel: ObservableObject {
         refreshUsageSnapshots()
         launches = LaunchLog(env: env).tail(50).reversed()
         recentFolders = RecentWorkspaces(env: env).folders(limit: 30)
+        refreshContracts()
+    }
+
+    /// Re-read the extensions' contract (cheap after the first read of each version).
+    func refreshContracts() {
+        let env = self.env
+        let editors = Editor.allCases.filter { editorStatus[$0] != .editorNotFound }
+        Task.detached(priority: .utility) {
+            var out: [Editor: ExtensionContract] = [:]
+            for e in editors { out[e] = ExtensionContract.check(editor: e, env: env) }
+            let found = out
+            await MainActor.run { self.contracts = found }
+        }
     }
 
     func refreshUsageSnapshots() {

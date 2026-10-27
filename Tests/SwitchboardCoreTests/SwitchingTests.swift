@@ -269,3 +269,54 @@ private extension UsageSnapshot {
         return s
     }
 }
+
+final class EditorLifecycleTests: XCTestCase {
+    private func bundle(_ box: Sandbox, _ editorDir: String, _ version: String) throws -> URL {
+        try box.fakeExecutable("\(editorDir)/extensions/anthropic.claude-code-\(version)-darwin-arm64/resources/native-binary/claude")
+    }
+
+    func testWindowNotYetReloadedGetsItsOwnBinary() throws {
+        let box = try Sandbox()
+        let old = try bundle(box, ".vscode", "2.1.300")
+        let new = try bundle(box, ".vscode", "2.1.310")
+        try box.write(".vscode/extensions/.obsolete", #"{"anthropic.claude-code-2.1.300-darwin-arm64":true}"#)
+        let locator = RealClaudeLocator(env: box.env)
+        let host = "/Applications/Visual Studio Code.app/Contents/Frameworks/Code Helper (Plugin).app/Contents/MacOS/Code Helper (Plugin)"
+        // The old extension (SDK 0.3.300) still runs in a window that was not reloaded.
+        XCTAssertEqual(locator.locate(mode: .editorWrapper, baseEnv: ["CLAUDE_AGENT_SDK_VERSION": "0.3.300"], parentExecutable: host), old.path)
+        XCTAssertEqual(locator.locate(mode: .editorWrapper, baseEnv: ["CLAUDE_AGENT_SDK_VERSION": "0.3.310"], parentExecutable: host), new.path)
+        // Unknown SDK: the newest version that is not obsolete.
+        XCTAssertEqual(locator.locate(mode: .editorWrapper, baseEnv: [:], parentExecutable: host), new.path)
+    }
+
+    func testEachEditorUsesItsOwnExtension() throws {
+        let box = try Sandbox()
+        let code = try bundle(box, ".vscode", "2.1.310")
+        let cursor = try bundle(box, ".cursor", "2.1.200")
+        let locator = RealClaudeLocator(env: box.env)
+        XCTAssertEqual(locator.locate(mode: .editorWrapper, baseEnv: [:], parentExecutable: "/Applications/Cursor.app/Contents/Frameworks/Cursor Helper (Plugin).app/Contents/MacOS/x"), cursor.path)
+        XCTAssertEqual(locator.locate(mode: .editorWrapper, baseEnv: [:], parentExecutable: "/Applications/Visual Studio Code.app/Contents/MacOS/x"), code.path)
+        // Unknown parent: newest anywhere.
+        XCTAssertEqual(locator.locate(mode: .editorWrapper, baseEnv: [:], parentExecutable: nil), code.path)
+    }
+
+    func testEditorOwningAnApp() {
+        XCTAssertEqual(Editor.owning(appExecutable: "/Applications/Visual Studio Code - Insiders.app/Contents/MacOS/Electron"), .insiders)
+        XCTAssertEqual(Editor.owning(appExecutable: "/Applications/Visual Studio Code.app/Contents/MacOS/Electron"), .code)
+        XCTAssertNil(Editor.owning(appExecutable: "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal"))
+    }
+
+    func testReopenLinkDetection() throws {
+        XCTAssertTrue(ExtensionContract.handlesReopenLink(Data(#"x.registerUriHandler({handleUri(O){switch(O.path){case"/open":{let x=R.get("session")"#.utf8)))
+        XCTAssertFalse(ExtensionContract.handlesReopenLink(Data(#"x.registerUriHandler({handleUri(O){switch(O.path){case"/install-plugin":{}"#.utf8)))
+
+        let box = try Sandbox()
+        try box.write(".vscode/extensions/anthropic.claude-code-2.1.310-darwin-arm64/package.json",
+                      #"{"contributes":{"configuration":{"properties":{"claudeCode.claudeProcessWrapper":{"scope":"machine"}}}}}"#)
+        try box.write(".vscode/extensions/anthropic.claude-code-2.1.310-darwin-arm64/extension.js", #"registerUriHandler case"/open" get("session")"#)
+        let c = ExtensionContract.check(editor: .code, env: box.env)
+        XCTAssertEqual(c.finding, .ok)
+        XCTAssertEqual(c.extensionVersion, "2.1.310")
+        XCTAssertTrue(c.reopensChats)
+    }
+}
