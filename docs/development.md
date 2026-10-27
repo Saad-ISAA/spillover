@@ -49,10 +49,13 @@ cd "$DEMO/Code/app" && "$OLDPWD/.build/debug/switchboard-launch"
 
 `SWITCHBOARD_REAL_CLAUDE` points the launcher at a stand-in for Claude.
 
-To look at a screen of the app against such a home:
+To look at every screen with realistic sample data (three accounts, limits with a week of
+history, a month of token counts), seed a fresh home and capture it in light or dark:
 
 ```sh
-scripts/demo-screenshot.sh "$DEMO" main:accounts /tmp/accounts.png   # or main:folders, popover, ...
+DEMO=$(mktemp -d)
+swift scripts/seed-demo.swift "$DEMO"
+scripts/demo-screenshot.sh "$DEMO" popover /tmp/popover.png dark   # or main:overview, main:usage, ...
 ```
 
 ## Conventions
