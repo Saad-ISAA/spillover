@@ -9,7 +9,7 @@ struct OverviewView: View {
     var body: some View {
         let finding = model.finding
         Page(title: "Overview", subtitle: subtitle(finding), subtitleTone: finding?.tone ?? .neutral) {
-            AssignFolderMenu(bordered: true)
+            EmptyView()
         } content: {
             // Column count follows the number of accounts: all in one row when they fit, else
             // two per row, so no face is left alone in a row of empty cells.

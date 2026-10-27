@@ -321,11 +321,15 @@ struct AssignFolderMenu: View {
         Dropdown(title: label, look: bordered ? .field : .link, help: "Give a folder its own account") {
             let accounts = model.profiles.filter { !$0.isDefault }
             if accounts.isEmpty { return [.note("Add an account first")] }
-            return accounts.map { p in
-                .action("\(p.displayName)…") {
-                    if let folder = model.chooseFolder() { model.assign(folder: folder, to: p.id) }
+            return [.note("Pick the account, then choose the folder")]
+                + accounts.map { p in
+                    .action("\(p.displayName)…") {
+                        if let folder = model.chooseFolder() { model.assign(folder: folder, to: p.id) }
+                    }
                 }
-            }
+                + [.divider, .action("Auto (most room)…") {
+                    if let folder = model.chooseFolder() { model.assign(folder: folder, to: Profile.autoID) }
+                }]
         }
     }
 }
