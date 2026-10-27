@@ -98,6 +98,23 @@ enum DockPresence {
         update()
     }
 
+    /// Close the window and leave the Dock; the menu bar icon keeps running. The first time,
+    /// say where Spillover went.
+    static func retreatToMenuBar() {
+        for window in NSApp.windows where window.isVisible && window.canBecomeMain {
+            window.close()
+        }
+        windowOpen = false
+        update()
+        let key = "toldAboutMenuBar"
+        guard !UserDefaults.standard.bool(forKey: key), Preferences.isBundled else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        let content = UNMutableNotificationContent()
+        content.title = "Spillover is still in the menu bar"
+        content.body = "It keeps routing and watching limits. To quit completely, choose Quit Spillover in its menu."
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: key, content: content, trigger: nil))
+    }
+
     private static func update() {
         let policy: NSApplication.ActivationPolicy = alwaysShown || windowOpen ? .regular : .accessory
         guard NSApp != nil, NSApp.activationPolicy() != policy else { return }

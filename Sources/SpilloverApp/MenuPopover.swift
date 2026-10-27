@@ -72,7 +72,7 @@ struct MenuPopover: View {
             Button("Open Spillover") { open(.overview) }
                 .buttonStyle(LinkButtonStyle())
             Spacer()
-            Button("Quit") { NSApp.terminate(nil) }
+            Button("Quit Spillover") { AppDelegate.quitCompletely() }
                 .buttonStyle(.plain)
                 .font(TypeScale.meta)
                 .foregroundStyle(Ink.muted)

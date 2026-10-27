@@ -4,11 +4,41 @@ import SpilloverCore
 import UserNotifications
 
 // A menu bar app: the Dock icon appears only while the window is open, or always if the user
-// asks (DockPresence).
+// asks (DockPresence). Quitting from the Dock or with Command-Q closes the window and keeps the
+// menu bar running; "Quit Spillover" in the menu bar (or Option-Command-Q) quits completely.
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    /// Set by the explicit "quit completely" commands.
+    @MainActor static var quitRequested = false
+
+    @MainActor static func quitCompletely() {
+        quitRequested = true
+        NSApp.terminate(nil)
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(DockPresence.alwaysShown ? .regular : .accessory)
         if Preferences.isBundled { UNUserNotificationCenter.current().delegate = self }
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        MainActor.assumeIsolated {
+            if Self.quitRequested || Self.sessionIsEnding() { return .terminateNow }
+            DockPresence.retreatToMenuBar()
+            return .terminateCancel
+        }
+    }
+
+    /// Log out, restart and shut down must never be held up by a menu bar app.
+    private static func sessionIsEnding() -> Bool {
+        guard let event = NSAppleEventManager.shared().currentAppleEvent,
+            event.eventClass == AEEventClass(kCoreEventClass), event.eventID == AEEventID(kAEQuitApplication),
+            let reason = event.attributeDescriptor(forKeyword: AEKeyword(kAEQuitReason))?.enumCodeValue
+        else { return false }
+        let ending: [OSType] = [
+            OSType(kAELogOut), OSType(kAEReallyLogOut), OSType(kAEShowRestartDialog), OSType(kAEShowShutdownDialog),
+            OSType(kAERestart), OSType(kAEShutDown),
+        ]
+        return ending.contains(reason)
     }
 
     /// Opening the app again (Finder, Spotlight, the Dock icon) brings its window forward.
@@ -65,6 +95,14 @@ struct SpilloverApp: App {
                 .preferredColorScheme(prefs.colorScheme)
         }
         .defaultSize(width: 1180, height: 820)
+        .commands {
+            CommandGroup(replacing: .appTermination) {
+                Button("Close to Menu Bar") { DockPresence.retreatToMenuBar() }
+                    .keyboardShortcut("q")
+                Button("Quit Spillover Completely") { AppDelegate.quitCompletely() }
+                    .keyboardShortcut("q", modifiers: [.command, .option])
+            }
+        }
 
         // The popover in an ordinary window: used for screenshots and documentation only
         // (opened by SPILLOVER_DEMO_SHOW=popover).

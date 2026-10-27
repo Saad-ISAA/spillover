@@ -4,7 +4,7 @@
 
 You have more than one Claude subscription (say, *Work* and *Personal*). Claude Code keeps one login per machine, so switching accounts in one VS Code window switches it everywhere. Spillover fixes that: assign each project folder to an account, and every new Claude session in that folder — in the VS Code Claude panel, in VS Code's terminal, or in any other terminal — uses that account. Other windows keep theirs.
 
-It lives in the menu bar and also shows each account's session and weekly limits.
+It lives in the menu bar and also shows each account's session and weekly limits. Closing its window, or quitting it from the Dock, keeps it running in the menu bar; choose **Quit Spillover** in its menu (or press Option-Command-Q) to quit completely.
 
 - **Per-folder accounts** in a single, normal VS Code. No extra VS Code instances, no profile juggling.
 - **Every launch path**: the Claude Code editor panel, `claude` in VS Code's terminal, iTerm, Ghostty, Terminal.
