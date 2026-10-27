@@ -192,10 +192,13 @@ private struct AccountFace: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(hovering && !selected ? Ink.raised : Ink.sheet, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .background(
+                Identity.tint(for: profile).opacity(hovering || selected ? 0.6 : 0.38),
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(selected ? Ink.text.opacity(0.75) : Ink.border, lineWidth: selected ? 1.5 : 1))
+                    .strokeBorder(
+                        selected ? Identity.ink(for: profile).opacity(0.7) : Ink.border, lineWidth: selected ? 1.5 : 1))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

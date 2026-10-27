@@ -50,6 +50,7 @@ struct SpilloverApp: App {
             MenuPopover()
                 .environmentObject(model)
                 .tint(Ink.data)
+                .preferredColorScheme(prefs.colorScheme)
         } label: {
             MenuBarLabel()
                 .environmentObject(model)
@@ -61,6 +62,7 @@ struct SpilloverApp: App {
             MainWindow()
                 .environmentObject(model)
                 .environmentObject(prefs)
+                .preferredColorScheme(prefs.colorScheme)
         }
         .defaultSize(width: 1180, height: 820)
 

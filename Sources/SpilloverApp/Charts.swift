@@ -67,11 +67,15 @@ struct PaceChart: View {
                 .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
 
             ForEach(data) { s in
+                // A soft fade under the line so the shape of the week reads at a glance.
                 AreaMark(x: .value("Time", s.at), y: .value("Used", s.value))
-                    .foregroundStyle(color.opacity(0.12))
+                    .foregroundStyle(
+                        LinearGradient(colors: [color.opacity(0.32), color.opacity(0.02)], startPoint: .top, endPoint: .bottom))
+                    .interpolationMethod(.monotone)
                 LineMark(x: .value("Time", s.at), y: .value("Used", s.value), series: .value("Line", "Used"))
                     .foregroundStyle(color)
-                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                    .interpolationMethod(.monotone)
+                    .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
             }
 
             if let end = forecastEnd(f) {
@@ -99,7 +103,10 @@ struct PaceChart: View {
                 .lineStyle(StrokeStyle(lineWidth: 1))
             PointMark(x: .value("Time", now), y: .value("Used", f.used))
                 .foregroundStyle(color)
-                .symbolSize(28)
+                .symbol {
+                    Circle().fill(color).frame(width: 8, height: 8)
+                        .background(Circle().fill(color.opacity(0.22)).frame(width: 18, height: 18))
+                }
         }
         .chartXScale(domain: f.windowStart...f.resetsAt)
         .chartYScale(domain: 0...112)

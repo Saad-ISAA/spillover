@@ -91,13 +91,20 @@ enum Identity {
         (0xF6DFEA, 0x3A1F2C, 0x8E2F5C, 0xF0A6C8),  // rose
         (0xEFE6D2, 0x332B1C, 0x6B5320, 0xDDC48E),  // khaki
         (0xDDEFE3, 0x1B3125, 0x2C6B45, 0x98D6AE),  // green
-        (0xE4E7EC, 0x24282E, 0x3F4A57, 0xC2CAD4),  // slate
+        (0xE9E2F7, 0x2A2240, 0x5B3E96, 0xC9B4F2),  // violet
+        (0xF8E3D9, 0x3A241C, 0x9A4524, 0xF2B293),  // coral
+        (0xE4E7EC, 0x24282E, 0x3F4A57, 0xC2CAD4),  // slate (Default)
     ]
 
+    /// Account ids in display order; set when accounts load so each gets its own hue.
+    static var order: [String] = []
+
     static func index(for profile: Profile) -> Int {
-        if profile.isDefault { return 4 }
+        if profile.isDefault { return hues.count - 1 }
+        let accents = hues.count - 1
+        if let i = order.firstIndex(of: profile.id) { return i % accents }
         let sum = profile.id.unicodeScalars.reduce(0) { $0 &+ Int($1.value) }
-        return sum % 4
+        return sum % accents
     }
 
     static func tint(for profile: Profile) -> Color {

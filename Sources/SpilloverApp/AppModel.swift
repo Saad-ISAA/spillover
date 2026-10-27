@@ -71,6 +71,9 @@ final class AppModel: ObservableObject {
     private var ticks = 0
 
     init(env: SBEnvironment = .live()) {
+        var env = env
+        // Demo homes live in a temporary folder; their made-up chats are chats, not helpers.
+        if DemoSessions.isActive(env) { env.temporaryFolders = [] }
         self.env = env
         self.service = AppService(env: env)
         Fmt.home = env.home.path
@@ -175,6 +178,7 @@ final class AppModel: ObservableObject {
     func refreshLocal() {
         do {
             profiles = try service.allProfiles()
+            Identity.order = profiles.filter { !$0.isDefault }.map(\.id)
         } catch {
             profiles = [Profile.builtInDefault()]
             show(.error, error.localizedDescription)

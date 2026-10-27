@@ -1,9 +1,8 @@
 import SwiftUI
 import SpilloverCore
 
-/// The menu bar popover. Reading order answers the glance question first: how loaded is the
-/// account that matters, when does it recover, and where is it heading; then every account;
-/// then which folder uses which account.
+/// The menu bar popover. Reading order answers the glance question first: every account's room
+/// at once, then where the chosen one is heading; then which folder uses which account.
 struct MenuPopover: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.openWindow) private var openWindow
@@ -15,11 +14,11 @@ struct MenuPopover: View {
     private var content: some View {
         VStack(alignment: .leading, spacing: 18) {
             notices
+            accounts
             if let p = model.focusProfile {
-                FocusFace(profile: p, chartKind: $chartKind)
+                PacePanel(profile: p, chartKind: $chartKind)
             }
             openNow
-            accounts
             folders
         }
         .padding(.horizontal, 16)
@@ -44,7 +43,7 @@ struct MenuPopover: View {
             footer
         }
         .onAppear { if !rendersStatically { model.refreshLimitsIfStale() } }
-        .frame(width: 380)
+        .frame(width: 392)
         .background(Ink.sheet)
     }
 
@@ -96,8 +95,8 @@ struct MenuPopover: View {
                 if stale > 0 {
                     // Held until the sessions restart: a changed assignment is not live in them yet.
                     Notice(icon: "arrow.triangle.2.circlepath", tone: .warning,
-                           text: "\(Fmt.plural(stale, "session")) still on the old account. Start a new chat to switch.") {
-                        Button("View") { open(.sessions) }.buttonStyle(LinkButtonStyle())
+                           text: "\(Fmt.plural(stale, "chat")) still on its old account. Move it, and it reopens on the new one with its history.") {
+                        Button("Move") { open(.sessions) }.buttonStyle(LinkButtonStyle())
                     }
                 }
                 if !model.vscodeConnected {
@@ -113,22 +112,19 @@ struct MenuPopover: View {
     // MARK: Accounts
 
     private var accounts: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: "Accounts") {
                 Button("Add…") { open(.accounts) }.buttonStyle(LinkButtonStyle())
             }
-            VStack(spacing: 2) {
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: model.profiles.count > 1 ? 2 : 1),
+                spacing: 8
+            ) {
                 ForEach(model.profiles) { p in
-                    AccountRow(profile: p, selected: p.id == model.focusProfile?.id) {
-                        withAnimation(.easeOut(duration: 0.2)) { model.focusedProfileId = p.id }
+                    AccountTile(profile: p, selected: p.id == model.focusProfile?.id) {
+                        withAnimation(.snappy(duration: 0.25)) { model.focusedProfileId = p.id }
                     }
                 }
-            }
-            if let best = model.bestHeadroom, model.profiles.count > 1, let peak = best.peakPercentage {
-                Text("Most room now: \(best.profile.displayName), fullest limit at \(Fmt.percent(peak)).")
-                    .font(TypeScale.meta)
-                    .foregroundStyle(Ink.muted)
-                    .padding(.leading, 2)
             }
         }
     }
@@ -201,75 +197,39 @@ private struct ContentHeight: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
-/// The focused account read like a watch face: the session gauge, when it recovers, the week,
-/// and the pace chart for the chosen window.
-private struct FocusFace: View {
+/// Where the chosen account is heading: the outlook sentence and the pace chart.
+private struct PacePanel: View {
     @EnvironmentObject var model: AppModel
     let profile: Profile
     @Binding var chartKind: UsageWindow.Kind
 
     var body: some View {
-        let five = model.window(.fiveHour, for: profile)
-        let seven = model.window(.sevenDay, for: profile)
-        VStack(alignment: .leading, spacing: 12) {
+        let window = model.window(chartKind, for: profile)
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Monogram(profile: profile, size: 18)
-                Text(profile.displayName).font(TypeScale.bodyStrong).foregroundStyle(Ink.text)
-                if let plan = model.statuses[profile.id]?.auth?.planLabel { Pill(text: plan) }
-                Spacer()
-                LoginState(status: model.statuses[profile.id], showsEmail: false)
+                Text("Pace · \(profile.displayName)").font(TypeScale.bodyStrong).foregroundStyle(Ink.text).lineLimit(1)
+                Spacer(minLength: 6)
+                Segmented(options: [(.sevenDay, "Week"), (.fiveHour, "Session")], selection: $chartKind)
             }
-
-            if five == nil && seven == nil {
-                emptyState
-            } else {
-                HStack(alignment: .center, spacing: 16) {
-                    LoadArc(
-                        percent: five.map { $0.effectivePercentage(at: model.now) },
-                        paceFraction: model.forecast(.fiveHour, for: profile)?.elapsedFraction,
-                        size: 84, lineWidth: 9, caption: "session")
-                    VStack(alignment: .leading, spacing: 8) {
-                        let reset = Fmt.reset(five, now: model.now)
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text(reset.value)
-                                .font(TypeScale.figure(30))
-                                .foregroundStyle(reset.value == "–" ? Ink.faint : Ink.text)
-                            Text(reset.value == "–" ? "no session in progress" : "until the session resets")
-                                .font(TypeScale.meta)
-                                .foregroundStyle(Ink.muted)
-                        }
-                        weekLine(seven)
-                    }
-                }
+            if let window {
                 outlook
-                chartSwitcher
-                if let w = chartKind == .fiveHour ? five : seven {
-                    PaceChart(window: w, points: model.history[profile.id] ?? [], now: model.now, height: 108, compact: true)
-                }
+                PaceChart(window: window, points: model.history[profile.id] ?? [], now: model.now, height: 116, compact: true)
+                legend
+            } else {
+                Text(emptyText)
+                    .font(TypeScale.meta)
+                    .foregroundStyle(Ink.muted)
+                    .frame(maxWidth: .infinity, minHeight: 60, alignment: .center)
             }
         }
         .padding(14)
         .background(Ink.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private func weekLine(_ seven: UsageWindow?) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text("Week").font(TypeScale.meta).foregroundStyle(Ink.muted)
-                Text(seven.map { Fmt.percent($0.effectivePercentage(at: model.now)) } ?? "–")
-                    .font(TypeScale.figure(13))
-                    .foregroundStyle(Ink.text)
-                Spacer(minLength: 4)
-                if let seven {
-                    Text("resets \(Fmt.moment(seven.resetsAt, now: model.now))")
-                        .font(TypeScale.meta.monospacedDigit())
-                        .foregroundStyle(Ink.faint)
-                }
-            }
-            MeterBar(
-                percent: seven.map { $0.effectivePercentage(at: model.now) },
-                paceFraction: model.forecast(.sevenDay, for: profile)?.elapsedFraction, height: 4)
-        }
+    private var emptyText: String {
+        if case .loggedOut = model.statuses[profile.id] { return "Log in to \(profile.displayName) to see its limits." }
+        return model.checkingLimits.contains(profile.id) ? "Checking this account's limits…" : "No limits reported for this account yet."
     }
 
     @ViewBuilder
@@ -283,28 +243,12 @@ private struct FocusFace: View {
         }
     }
 
-    private var chartSwitcher: some View {
-        HStack(spacing: 14) {
-            ForEach([UsageWindow.Kind.sevenDay, .fiveHour], id: \.self) { kind in
-                Button {
-                    withAnimation(.easeOut(duration: 0.2)) { chartKind = kind }
-                } label: {
-                    VStack(spacing: 3) {
-                        Text(kind == .fiveHour ? "Session" : "Week")
-                            .font(TypeScale.meta.weight(chartKind == kind ? .semibold : .regular))
-                            .foregroundStyle(chartKind == kind ? Ink.text : Ink.muted)
-                        Rectangle().fill(chartKind == kind ? Ink.data : .clear).frame(height: 2)
-                    }
-                    .fixedSize()
-                }
-                .buttonStyle(.plain)
-            }
+    private var legend: some View {
+        HStack(spacing: 12) {
+            legendItem(dash: nil, "used", color: chartColor)
+            legendItem(dash: [2, 3], "even pace", color: Ink.faint)
+            legendItem(dash: [4, 3], "forecast", color: chartColor)
             Spacer()
-            HStack(spacing: 10) {
-                legend(dash: nil, "used", color: chartColor)
-                legend(dash: [2, 3], "even", color: Ink.faint)
-                legend(dash: [4, 3], "forecast", color: chartColor)
-            }
         }
     }
 
@@ -315,7 +259,7 @@ private struct FocusFace: View {
         return Ink.load(f.used)
     }
 
-    private func legend(dash: [CGFloat]?, _ label: String, color: Color) -> some View {
+    private func legendItem(dash: [CGFloat]?, _ label: String, color: Color) -> some View {
         HStack(spacing: 4) {
             Path { p in
                 p.move(to: CGPoint(x: 0, y: 4))
@@ -326,30 +270,11 @@ private struct FocusFace: View {
             Text(label).font(.system(size: 10)).foregroundStyle(Ink.faint)
         }
     }
-
-    @ViewBuilder
-    private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 14) {
-                LoadArc(percent: nil, size: 64, lineWidth: 7, caption: "session")
-                VStack(alignment: .leading, spacing: 4) {
-                    if case .loggedOut = model.statuses[profile.id] {
-                        Text("Log in to start using this account.").font(TypeScale.body).foregroundStyle(Ink.text)
-                        Button("Log in…") { model.logIn(profile) }.buttonStyle(PrimaryButtonStyle())
-                    } else if model.checkingLimits.contains(profile.id) {
-                        Text("Checking this account's limits…").font(TypeScale.body).foregroundStyle(Ink.text)
-                    } else {
-                        Text("This account reported no limits.").font(TypeScale.body).foregroundStyle(Ink.text)
-                        Button("Check again") { model.refreshLimits() }.buttonStyle(QuietButtonStyle())
-                    }
-                }
-            }
-        }
-    }
 }
 
-/// One account in the popover list. Tapping makes it the focused face.
-private struct AccountRow: View {
+/// One account as a tile in its own colour: the session (outer ring) and week (inner ring), when
+/// the session frees up, and how many chats run on it. Tapping picks it for the pace chart.
+private struct AccountTile: View {
     @EnvironmentObject var model: AppModel
     let profile: Profile
     let selected: Bool
@@ -357,40 +282,40 @@ private struct AccountRow: View {
     @State private var hovering = false
 
     var body: some View {
-        let five = model.window(.fiveHour, for: profile)
-        let seven = model.window(.sevenDay, for: profile)
+        let five = model.window(.fiveHour, for: profile)?.effectivePercentage(at: model.now)
+        let seven = model.window(.sevenDay, for: profile)?.effectivePercentage(at: model.now)
+        let live = model.runningCount(for: profile)
         Button(action: select) {
-            HStack(spacing: 10) {
-                Monogram(profile: profile, size: 24)
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 5) {
-                        Text(profile.displayName).font(TypeScale.bodyStrong).foregroundStyle(Ink.text).lineLimit(1)
-                        if model.runningCount(for: profile) > 0 {
-                            Text("\(model.runningCount(for: profile)) live")
-                                .font(TypeScale.meta)
-                                .foregroundStyle(Ink.data)
-                                .help("Claude sessions running on this account now")
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Monogram(profile: profile, size: 18)
+                    Text(profile.displayName).font(TypeScale.bodyStrong).foregroundStyle(Ink.text).lineLimit(1)
+                    Spacer(minLength: 2)
+                    if live > 0 {
+                        HStack(spacing: 3) {
+                            Circle().fill(Ink.positive).frame(width: 6, height: 6)
+                            Text("\(live)").font(TypeScale.meta.monospacedDigit()).foregroundStyle(Ink.muted)
                         }
+                        .help("\(Fmt.plural(live, "chat")) running on this account")
                     }
-                    subtitle(five: five)
                 }
-                Spacer(minLength: 6)
-                if seven != nil || five != nil {
-                    VStack(alignment: .trailing, spacing: 3) {
-                        Text("wk \(seven.map { Fmt.percent($0.effectivePercentage(at: model.now)) } ?? "–")")
-                            .font(TypeScale.meta.monospacedDigit())
-                            .foregroundStyle(Ink.muted)
-                        MeterBar(percent: seven.map { $0.effectivePercentage(at: model.now) }, height: 3)
-                            .frame(width: 54)
+                HStack(spacing: 10) {
+                    DualRing(session: five, week: seven, size: 54)
+                    VStack(alignment: .leading, spacing: 2) {
+                        figure("Session", five)
+                        figure("Week", seven)
+                        Text(footnote).font(.system(size: 10)).foregroundStyle(Ink.faint).lineLimit(1)
                     }
-                    LoadArc(percent: five.map { $0.effectivePercentage(at: model.now) }, size: 32, lineWidth: 4)
-                } else if case .loggedOut = model.statuses[profile.id] {
-                    Button("Log in…") { model.logIn(profile) }.buttonStyle(QuietButtonStyle())
+                    Spacer(minLength: 0)
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(selected ? Ink.active : (hovering ? Ink.raised : .clear), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .padding(10)
+            .background(
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(Identity.tint(for: profile).opacity(hovering || selected ? 0.75 : 0.5)))
+            .overlay(
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .strokeBorder(selected ? Identity.ink(for: profile).opacity(0.7) : Ink.border.opacity(0.6), lineWidth: selected ? 1.5 : 1))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -399,22 +324,27 @@ private struct AccountRow: View {
         .accessibilityLabel(accessibility(five: five, seven: seven))
     }
 
-    @ViewBuilder
-    private func subtitle(five: UsageWindow?) -> some View {
+    private func figure(_ label: String, _ value: Double?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text(label).font(.system(size: 10, weight: .medium)).foregroundStyle(Ink.muted)
+            Text(value.map(Fmt.percent) ?? "–")
+                .font(TypeScale.figure(13))
+                .foregroundStyle(value.map { $0 >= HeadroomAdvisor.warningThreshold ? Ink.load($0) : Ink.text } ?? Ink.faint)
+        }
+    }
+
+    private var footnote: String {
         switch model.statuses[profile.id] ?? .unknown {
-        case .loggedOut:
-            Text("Not logged in").font(TypeScale.meta).foregroundStyle(Ink.warning)
-        case .error:
-            Text("Login check failed").font(TypeScale.meta).foregroundStyle(Ink.negative)
+        case .loggedOut: return "Not logged in"
+        case .error: return "Login check failed"
         default:
-            if let five, five.resetsAt > model.now, five.usedPercentage > 0 {
-                Text("session frees in \(Fmt.countdown(to: five.resetsAt, now: model.now))")
-                    .font(TypeScale.meta.monospacedDigit()).foregroundStyle(Ink.muted)
-            } else if let plan = model.statuses[profile.id]?.auth?.planLabel {
-                Text(profile.isDefault ? "\(plan) · your normal login" : plan).font(TypeScale.meta).foregroundStyle(Ink.muted)
-            } else {
-                Text(profile.isDefault ? "Your normal login" : "No limits yet").font(TypeScale.meta).foregroundStyle(Ink.muted)
+            if let five = model.window(.fiveHour, for: profile), five.resetsAt > model.now,
+                five.effectivePercentage(at: model.now) > 0
+            {
+                return "frees in \(Fmt.countdown(to: five.resetsAt, now: model.now))"
             }
+            if model.checkingLimits.contains(profile.id) { return "checking…" }
+            return model.statuses[profile.id]?.auth?.planLabel ?? (profile.isDefault ? "Your normal login" : "")
         }
     }
 
@@ -427,10 +357,10 @@ private struct AccountRow: View {
         }
     }
 
-    private func accessibility(five: UsageWindow?, seven: UsageWindow?) -> String {
+    private func accessibility(five: Double?, seven: Double?) -> String {
         var parts = [profile.displayName]
-        if let five { parts.append("session \(Fmt.percent(five.effectivePercentage(at: model.now))) used") }
-        if let seven { parts.append("week \(Fmt.percent(seven.effectivePercentage(at: model.now))) used") }
+        if let five { parts.append("session \(Fmt.percent(five)) used") }
+        if let seven { parts.append("week \(Fmt.percent(seven)) used") }
         return parts.joined(separator: ", ")
     }
 }

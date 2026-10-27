@@ -54,6 +54,15 @@ final class Preferences: ObservableObject {
     /// Login items and notifications need a real app bundle (not a bare development binary).
     nonisolated static var isBundled: Bool { Bundle.main.bundleIdentifier != nil }
 
+    /// For SwiftUI scenes (the menu bar popover does not always inherit the app's appearance).
+    var colorScheme: ColorScheme? {
+        switch appearance {
+        case "light": return .light
+        case "dark": return .dark
+        default: return nil
+        }
+    }
+
     /// The window and the menu bar popover follow this; "system" follows macOS.
     static func apply(appearance: String) {
         switch appearance {

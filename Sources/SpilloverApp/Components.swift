@@ -413,3 +413,38 @@ struct Panel<Content: View>: View {
 struct Rule: View {
     var body: some View { Rectangle().fill(Ink.rule).frame(height: 1) }
 }
+
+/// Two concentric rings: the session limit outside, the week inside, each in its load colour,
+/// with the session figure in the middle.
+struct DualRing: View {
+    let session: Double?
+    let week: Double?
+    var size: CGFloat = 54
+
+    var body: some View {
+        let outer = size * 0.12, inner = size * 0.09, gap = size * 0.05
+        ZStack {
+            ring(session, diameter: size, width: outer)
+            ring(week, diameter: size - 2 * (outer + gap), width: inner)
+            Text(session.map(Fmt.percent) ?? "–")
+                .font(TypeScale.figure(size * 0.2))
+                .foregroundStyle(session == nil ? Ink.faint : Ink.text)
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
+
+    private func ring(_ value: Double?, diameter: CGFloat, width: CGFloat) -> some View {
+        ZStack {
+            Circle().stroke(Ink.track.opacity(0.9), lineWidth: width)
+            if let value, value > 0 {
+                Circle()
+                    .trim(from: 0, to: min(value, 100) / 100)
+                    .stroke(Ink.load(value), style: StrokeStyle(lineWidth: width, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .animation(.easeOut(duration: 0.35), value: value)
+            }
+        }
+        .frame(width: diameter - width, height: diameter - width)
+    }
+}
