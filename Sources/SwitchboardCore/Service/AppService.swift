@@ -88,6 +88,16 @@ public final class AppService {
         return out
     }
 
+    public func usageHistory() -> [String: [UsagePoint]] {
+        let history = UsageHistory(env: env)
+        var out: [String: [UsagePoint]] = [:]
+        for p in (try? profiles.all()) ?? [] {
+            let points = history.load(profileId: p.id)
+            if !points.isEmpty { out[p.id] = points }
+        }
+        return out
+    }
+
     // MARK: Health
 
     public func doctor(includeKeychain: Bool = true) -> [HealthCheck] {

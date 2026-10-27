@@ -63,6 +63,7 @@ public struct StatuslineCapture {
         let snapshot = Self.parse(input, profileId: profileId)
         if let snapshot, !snapshot.windows.isEmpty {
             try? UsageStore(env: env).save(snapshot)
+            try? UsageHistory(env: env).record(snapshot)
         }
         if let chained = StatuslineInstaller(env: env).chainedCommand(profileId: profileId) {
             let result = runner.run(
