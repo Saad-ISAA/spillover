@@ -14,6 +14,8 @@ public enum Provider: String, Codable, Sendable, CaseIterable {
 /// variable, so an explicit default path reads a different (empty) slot.
 public struct Profile: Codable, Equatable, Hashable, Identifiable, Sendable {
     public static let defaultID = "default"
+    /// Reserved route target: "pick the account with the most room when Claude starts".
+    public static let autoID = "auto"
 
     public var id: String
     public var displayName: String

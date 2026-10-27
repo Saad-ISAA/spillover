@@ -37,6 +37,42 @@ public enum Editor: String, CaseIterable, Codable, Sendable {
         userDirectory(env: env).appendingPathComponent("settings.json")
     }
 
+    /// URL scheme the editor registers (`vscode://...`).
+    public var urlScheme: String {
+        switch self {
+        case .code: return "vscode"
+        case .insiders: return "vscode-insiders"
+        case .vscodium: return "vscodium"
+        case .cursor: return "cursor"
+        case .windsurf: return "windsurf"
+        }
+    }
+
+    /// Folder under the home directory where the editor keeps its extensions.
+    var extensionsDirectoryName: String {
+        switch self {
+        case .code: return ".vscode"
+        case .insiders: return ".vscode-insiders"
+        case .vscodium: return ".vscode-oss"
+        case .cursor: return ".cursor"
+        case .windsurf: return ".windsurf"
+        }
+    }
+
+    /// The Claude extension's link that reopens a conversation in this editor.
+    public func claudeSessionURL(_ conversationId: String) -> URL? {
+        guard let id = ConversationID.valid(conversationId) else { return nil }
+        return URL(string: "\(urlScheme)://anthropic.claude-code/open?session=\(id)")
+    }
+
+    /// Which editor bundled the Claude binary at `executable` (its extensions folder is in the path).
+    public static func hosting(executable: String) -> Editor? {
+        guard executable.contains("/anthropic.claude-code") else { return nil }
+        // Longest folder name first: ".vscode-insiders" before ".vscode".
+        return allCases.sorted { $0.extensionsDirectoryName.count > $1.extensionsDirectoryName.count }
+            .first { executable.contains("/\($0.extensionsDirectoryName)/extensions/") }
+    }
+
     /// Editors that have been run on this machine (their user settings directory exists).
     public static func installed(env: SBEnvironment) -> [Editor] {
         allCases.filter {

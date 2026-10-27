@@ -31,6 +31,9 @@ second implementation appears.
 | Scrubbing text before logs | `Security/Redaction.swift` | `RedactionTests` |
 | Editing VS Code settings | `Integrations/JSONCDocument.swift`, `VSCodeInstaller.swift` | `testExecutablesStayThin` |
 | Keychain (names only) | `Profiles/KeychainSlot.swift` | `testKeychainIsNeverReadForSecrets` |
+| Which account an Auto folder gets | `Routing/AutoPolicy.swift` (policy and `auto.json`), called only by the resolver | `AutoPolicyTests` |
+| Moving a conversation's history between accounts | `Sessions/Conversations.swift` (`ConversationStore`) | `ConversationTests` |
+| Ending another process (a chat being moved) | `Sessions/SessionControl.swift` | `testOnlySessionControlSignalsProcesses` |
 | Network | none — Switchboard makes no requests | `testNoNetworkClients` |
 
 ## Registries
@@ -79,8 +82,9 @@ by message id.
 `Sessions/SessionScanner.swift` lists the user's own `claude` processes with `proc_listallpids`,
 `proc_pidpath`, `sysctl(KERN_PROCARGS2)` and `proc_pidinfo(PROC_PIDVNODEPATHINFO)`. While parsing a
 process's arguments it keeps exactly two environment variables (`CLAUDE_CONFIG_DIR`,
-`SWITCHBOARD_PROFILE`) and discards the rest. Each session is compared with today's resolution of
-its folder to flag sessions that need a restart after a reassignment.
+`SWITCHBOARD_PROFILE`) and the conversation id (`--resume`), and discards the rest. Each session is
+compared with today's resolution of its folder to flag sessions that need moving after a
+reassignment (in Auto folders, only when their account ran low).
 
 ## Files written
 
@@ -97,3 +101,22 @@ backups/              editor settings before each edit
 usage/                captured limits and the statusline chain
 tmp/                  short-lived Terminal scripts for login
 ```
+
+
+## Moving a chat to another account
+
+The VS Code extension starts every chat as `claude --resume=<conversation id>`, and reopens a
+conversation through `vscode://anthropic.claude-code/open?session=<id>`. Conversation history lives
+in each account's own config folder. A move therefore:
+
+1. copies the conversation's transcript, its companion folder and its file checkpoints into the
+   target account (`ConversationStore.ensure`, newest copy wins, byte for byte);
+2. waits until the chat is between turns (`ConversationActivity`: the last conversational record is
+   a finished assistant reply and the file is quiet; automatic moves accept nothing less);
+3. ends that one process (`SessionControl.end`, which re-checks the pid is still the same chat);
+4. focuses the chat's window and opens the reopen link; the extension starts the chat again through
+   the launcher, which routes it to the folder's (new) account and copies the transcript again if
+   it changed.
+
+The launcher does step 1 on every resumed launch, so reloading a window after reassigning its
+folder also moves its chats with their history. No login data is read, copied or changed.

@@ -11,12 +11,17 @@ public struct RunningSession: Equatable, Sendable, Identifiable {
     /// Set when the session was started through Switchboard's launcher.
     public let switchboardProfile: String?
     public let startedAt: Date?
+    /// The conversation this process continues (`--resume`), when it says.
+    public let conversationId: String?
 
     public var id: Int32 { pid }
 
+    /// The editor whose Claude extension started this process (nil for terminal sessions).
+    public var editor: Editor? { Editor.hosting(executable: executable) }
+
     public init(
         pid: Int32, executable: String, cwd: String?, configDir: String?, switchboardProfile: String?,
-        startedAt: Date?
+        startedAt: Date?, conversationId: String? = nil
     ) {
         self.pid = pid
         self.executable = executable
@@ -24,6 +29,7 @@ public struct RunningSession: Equatable, Sendable, Identifiable {
         self.configDir = configDir
         self.switchboardProfile = switchboardProfile
         self.startedAt = startedAt
+        self.conversationId = conversationId
     }
 }
 
@@ -49,8 +55,9 @@ public struct SessionAssessment: Equatable, Sendable, Identifiable {
 }
 
 /// Lists running Claude processes of the current user and reads exactly two environment
-/// variables from each (`CLAUDE_CONFIG_DIR`, `SWITCHBOARD_PROFILE`) plus its working directory.
-/// Every other environment variable is discarded while parsing and never stored.
+/// variables from each (`CLAUDE_CONFIG_DIR`, `SWITCHBOARD_PROFILE`), its working directory and
+/// the conversation id in its arguments. Every other environment variable and argument is
+/// discarded while parsing and never stored.
 public struct SessionScanner {
     static let keptVariables: Set<String> = [ProfileEnvironment.configDirKey, ProfileEnvironment.profileKey]
 
@@ -61,27 +68,29 @@ public struct SessionScanner {
     }
 
     public func scan() -> [RunningSession] {
-        let uid = getuid()
-        var sessions: [RunningSession] = []
-        for pid in Self.allPIDs() where pid > 0 {
-            guard let path = Self.executablePath(pid), Self.isClaudeExecutable(path) else { continue }
-            guard let info = Self.basicInfo(pid), info.uid == uid else { continue }
-            guard let args = Self.procArgs(pid) else { continue }
-            let parsed = Self.parseProcArgs(args)
-            sessions.append(
-                RunningSession(
-                    pid: pid, executable: path, cwd: Self.workingDirectory(pid),
-                    configDir: parsed.env[ProfileEnvironment.configDirKey],
-                    switchboardProfile: parsed.env[ProfileEnvironment.profileKey],
-                    startedAt: info.started))
-        }
-        return sessions.sorted { ($0.startedAt ?? .distantPast) > ($1.startedAt ?? .distantPast) }
+        Self.allPIDs().compactMap(Self.session(pid:))
+            .sorted { ($0.startedAt ?? .distantPast) > ($1.startedAt ?? .distantPast) }
+    }
+
+    /// The Claude session running as `pid` right now, if it is one of this user's.
+    static func session(pid: Int32) -> RunningSession? {
+        guard pid > 0, let path = executablePath(pid), isClaudeExecutable(path) else { return nil }
+        guard let info = basicInfo(pid), info.uid == getuid() else { return nil }
+        guard let args = procArgs(pid) else { return nil }
+        let parsed = parseProcArgs(args)
+        return RunningSession(
+            pid: pid, executable: path, cwd: workingDirectory(pid),
+            configDir: parsed.env[ProfileEnvironment.configDirKey],
+            switchboardProfile: parsed.env[ProfileEnvironment.profileKey],
+            startedAt: info.started, conversationId: ConversationID.from(args: Array(parsed.argv.dropFirst())))
     }
 
     /// Compare each running session with today's assignments.
     public func assess(_ sessions: [RunningSession]) -> [SessionAssessment] {
         let profiles = (try? ProfileStore(env: env).all()) ?? [Profile.builtInDefault()]
         let resolver = Resolver(env: env)
+        let policy = AutoPolicyStore(env: env).current()
+        let usage = UsageStore(env: env)
         return sessions.map { s in
             let actual = Self.profileId(for: s, profiles: profiles, caseInsensitive: env.caseInsensitivePaths)
             guard let cwd = s.cwd else {
@@ -93,7 +102,13 @@ public struct SessionScanner {
                 return SessionAssessment(session: s, actualProfileId: actual, state: .refusedNow)
             case .unrouted:
                 expected = Profile.defaultID
-            case .routed(let p, _):
+            case .routed(let p, let route):
+                // Auto folders: any account with room is right; only one that ran low is behind.
+                if route.profileId == Profile.autoID, let actual,
+                    !policy.isOutOfRoom(usage.load(profileId: actual))
+                {
+                    return SessionAssessment(session: s, actualProfileId: actual, state: .matches)
+                }
                 expected = p.id
             }
             guard let actual else {

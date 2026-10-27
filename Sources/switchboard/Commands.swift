@@ -178,7 +178,7 @@ struct Commands {
             Out.table(routes.map { [$0.folder, "→", $0.profileId] })
         case "set", "assign":
             guard let folder = args.positional(2), let id = args.positional(3) else {
-                throw CLIError.usage("switchboard route set <folder> <profile-id>")
+                throw CLIError.usage("switchboard route set <folder> <profile-id|auto>")
             }
             let route = try service.assign(folder: absolute(folder), to: id)
             Out.line("\(route.folder) → \(id)")

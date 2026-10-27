@@ -117,7 +117,9 @@ public final class ProfileStore {
     private func uniqueID(base: String, taken: Set<String>) -> String {
         var candidate = base
         var n = 2
-        while taken.contains(candidate) || candidate == Profile.defaultID || !ProfileID.isValid(candidate) {
+        while taken.contains(candidate) || candidate == Profile.defaultID || candidate == Profile.autoID
+            || !ProfileID.isValid(candidate)
+        {
             candidate = "\(base.prefix(36))-\(n)"
             n += 1
         }

@@ -69,6 +69,7 @@ run(["route", "set", home.appendingPathComponent("Code/api-server").path, "work"
 run(["route", "set", home.appendingPathComponent("Code/billing-service").path, "work"])
 run(["route", "set", home.appendingPathComponent("Code/client-portal").path, "client"])
 run(["route", "set", home.appendingPathComponent("Code/blog").path, "personal"])
+run(["route", "set", home.appendingPathComponent("Code/infra").path, "auto"])
 
 // VS Code: recently opened folders, and connect it so the setup notice is not shown.
 let storage = """

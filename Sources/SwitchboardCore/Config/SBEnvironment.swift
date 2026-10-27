@@ -67,6 +67,7 @@ public struct SBPaths: Sendable {
     public var backupsDir: URL { root.appendingPathComponent("backups", isDirectory: true) }
     public var installManifest: URL { root.appendingPathComponent("install-manifest.json") }
     public var usageDir: URL { root.appendingPathComponent("usage", isDirectory: true) }
+    public var autoPolicyFile: URL { root.appendingPathComponent("auto.json") }
     public var tmpDir: URL { root.appendingPathComponent("tmp", isDirectory: true) }
 
     /// The default Claude Code config dir (`~/.claude`). It is the "Default" profile.

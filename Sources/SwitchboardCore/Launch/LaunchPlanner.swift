@@ -69,14 +69,33 @@ public struct LaunchPlanner {
         var environment = request.environment
         var profileID = "-"
         var outcome = bypass ? "bypass" : "unrouted"
-        if case .routed(let profile, _) = resolution {
+        var target = Profile.builtInDefault()
+        if case .routed(let profile, let route) = resolution {
             environment = ProfileEnvironment.apply(profile, to: environment)
             profileID = profile.id
-            outcome = "routed"
+            outcome = route.profileId == Profile.autoID ? "routed:auto" : "routed"
+            target = profile
+        }
+        if !bypass, let conversation = ConversationID.from(args: request.args) {
+            outcome += handOff(conversation, cwd: request.cwd, to: target)
         }
         log.append(mode: request.mode, cwd: request.cwd, profile: profileID, outcome: outcome)
         return .exec(
             LaunchPlan(executable: executable, args: request.args, environment: environment),
             resolution)
+    }
+
+    /// A resumed conversation must exist in the account it starts on: copy the newest copy there
+    /// (a chat moved to another account keeps its context). Never blocks the launch.
+    private func handOff(_ conversation: String, cwd: String, to target: Profile) -> String {
+        let profiles = (try? ProfileStore(env: env).all()) ?? [Profile.builtInDefault()]
+        do {
+            switch try ConversationStore(env: env).ensure(id: conversation, cwd: cwd, target: target, among: profiles) {
+            case .current: return ""
+            case .copied(let from): return "+handoff:\(from)"
+            }
+        } catch {
+            return "+handoff-failed"
+        }
     }
 }

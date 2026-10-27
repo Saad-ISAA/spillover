@@ -151,3 +151,30 @@ controls:
     status: exempt
     reason: Ad-hoc signing for now so no paid developer account is required.
     reversal: Sign with a Developer ID and notarise once public releases are published.
+
+  - id: SB-SEC-20
+    title: Only one module ends other processes, and only the chat it was pointed at
+    status: enforced
+    owner: Sources/SwitchboardCore/Sessions/SessionControl.swift
+    notes: Re-reads the pid's executable, folder, conversation id and start time before SIGTERM, so a reused pid is never signalled. Chats are ended only between turns.
+    tests:
+      - ArchitectureTests.testOnlySessionControlSignalsProcesses
+      - ConversationTests.testEndRefusesAReusedPid
+
+  - id: SB-SEC-21
+    title: Conversation handoff copies files without reading them, owner-only
+    status: enforced
+    owner: Sources/SwitchboardCore/Sessions/Conversations.swift
+    notes: Ids are validated (hex and dashes only) before they name a file; symlinks are never copied; copies are 0600 in 0700 folders. Activity checks read only the record type and stop reason.
+    tests:
+      - ConversationTests.testConversationIDFromArguments
+      - ConversationTests.testHandoffCopiesNewestConversationToTarget
+      - ConversationTests.testActivityState
+
+  - id: SB-SEC-22
+    title: Auto folders fail closed when their settings cannot be trusted
+    status: enforced
+    owner: Sources/SwitchboardCore/Routing/AutoPolicy.swift
+    tests:
+      - AutoPolicyTests.testUnreadableAutoSettingsFailClosed
+

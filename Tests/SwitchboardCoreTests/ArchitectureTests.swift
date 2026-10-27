@@ -58,6 +58,11 @@ final class ArchitectureTests: XCTestCase {
             offenders(containing: "Process()", allowed: ["SwitchboardCore/Profiles/CommandRunner.swift"]), [])
     }
 
+    func testOnlySessionControlSignalsProcesses() {
+        XCTAssertEqual(
+            offenders(containing: "kill(", allowed: ["SwitchboardCore/Sessions/SessionControl.swift"]), [])
+    }
+
     func testOnlyTheLauncherExecs() {
         XCTAssertEqual(offenders(containing: "execve(", allowed: ["switchboard-launch/main.swift"]), [])
         XCTAssertEqual(offenders(containing: "execv(", allowed: []), [])

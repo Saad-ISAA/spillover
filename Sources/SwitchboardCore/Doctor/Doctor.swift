@@ -104,6 +104,20 @@ public struct Doctor {
         }
     }
 
+    private func autoChecks(routes: [Route]) -> [HealthCheck] {
+        guard routes.contains(where: { $0.profileId == Profile.autoID }) else { return [] }
+        switch AutoPolicyStore(env: env).load() {
+        case .loaded(let p):
+            return [HealthCheck(
+                id: "auto", title: "Auto", status: .ok,
+                detail: "Auto folders move on at \(Int(p.threshold))%; open chats \(p.moveOpenChats ? "move" : "stay") when an account runs low.")]
+        case .corrupt(let why), .insecure(let why):
+            return [HealthCheck(
+                id: "auto", title: "Auto", status: .failure,
+                detail: "auto.json cannot be used (\(why)). Claude refuses to start in Auto folders.")]
+        }
+    }
+
     private func routeChecks(profiles: [Profile]) -> [HealthCheck] {
         switch RouteStore(env: env).load() {
         case .missing:
@@ -126,7 +140,8 @@ public struct Doctor {
                 HealthCheck(
                     id: "routes", title: "Routes", status: .ok, detail: "\(routes.count) folder(s) assigned.")
             ]
-            for r in routes where !ids.contains(r.profileId) {
+            out += autoChecks(routes: routes)
+            for r in routes where !ids.contains(r.profileId) && r.profileId != Profile.autoID {
                 out.append(
                     HealthCheck(
                         id: "route.\(r.folder)", title: "Route \(r.folder)", status: .failure,

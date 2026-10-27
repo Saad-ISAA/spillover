@@ -54,7 +54,7 @@ public final class AppService {
 
     @discardableResult
     public func assign(folder: String, to profileId: String) throws -> Route {
-        let ids = Set(try profiles.all().map(\.id))
+        let ids = Set(try profiles.all().map(\.id)).union([Profile.autoID])
         return try routes.set(folder: folder, profileId: profileId, knownProfileIDs: ids)
     }
 
