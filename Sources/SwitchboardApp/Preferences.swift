@@ -38,9 +38,23 @@ final class Preferences: ObservableObject {
     }
 }
 
-/// Posts a notification once per account, limit window and threshold.
+/// Posts a notification once per account, limit window and threshold, with a one-click action
+/// that moves that account's folders and open chats to the account with the most room.
 enum LimitNotifier {
     static let thresholds: [Double] = [80, 95]
+    static let moveAction = "move"
+    private static var categories: [String: UNNotificationCategory] = [:]
+
+    /// Action buttons carry their title, so there is one category per target account.
+    private static func category(movingTo target: Profile) -> String {
+        let id = "near-limit-\(target.id)"
+        if categories[id] == nil {
+            let action = UNNotificationAction(identifier: moveAction, title: "Move work to \(target.displayName)", options: [])
+            categories[id] = UNNotificationCategory(identifier: id, actions: [action], intentIdentifiers: [], options: [])
+            UNUserNotificationCenter.current().setNotificationCategories(Set(categories.values))
+        }
+        return id
+    }
 
     static func requestAuthorization() {
         guard Preferences.isBundled else { return }
@@ -61,7 +75,17 @@ enum LimitNotifier {
                 sent.insert(key)
                 let content = UNMutableNotificationContent()
                 content.title = "\(p.displayName): \(Int(pct.rounded()))% of \(w.kind.label.lowercased()) used"
-                content.body = "Resets in \(Fmt.countdown(to: w.resetsAt, now: now)). Consider moving new work to another account."
+                let others = profiles.filter { $0.id != p.id }
+                let policy = AutoPolicy()
+                if let target = policy.choose(profiles: others, snapshots: snapshots, now: now),
+                    !policy.isOutOfRoom(snapshots[target.id], now: now)
+                {
+                    content.body = "Resets in \(Fmt.countdown(to: w.resetsAt, now: now)). \(target.displayName) has the most room."
+                    content.categoryIdentifier = category(movingTo: target)
+                    content.userInfo = ["from": p.id, "to": target.id]
+                } else {
+                    content.body = "Resets in \(Fmt.countdown(to: w.resetsAt, now: now)). No other account has much room either."
+                }
                 UNUserNotificationCenter.current().add(
                     UNNotificationRequest(identifier: key, content: content, trigger: nil))
             }

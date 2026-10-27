@@ -19,6 +19,7 @@ struct MenuPopover: View {
                     if let p = model.focusProfile {
                         FocusFace(profile: p, chartKind: $chartKind)
                     }
+                    openNow
                     accounts
                     folders
                 }
@@ -121,11 +122,34 @@ struct MenuPopover: View {
         }
     }
 
+    // MARK: Open now
+
+    @ViewBuilder
+    private var openNow: some View {
+        let windows = model.openWindows
+        if !windows.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                SectionHeader(title: "Open now") {
+                    Text(Fmt.plural(windows.reduce(0) { $0 + $1.sessions.count }, "chat")).font(TypeScale.meta).foregroundStyle(Ink.faint)
+                }
+                VStack(spacing: 0) {
+                    ForEach(Array(windows.prefix(4).enumerated()), id: \.element.id) { i, w in
+                        if i > 0 { Rule() }
+                        OpenWindowLine(window: w)
+                    }
+                }
+                if windows.count > 4 {
+                    Button("All \(windows.count) open folders") { open(.sessions) }.buttonStyle(LinkButtonStyle())
+                }
+            }
+        }
+    }
+
     // MARK: Folders
 
     private var folders: some View {
         VStack(alignment: .leading, spacing: 6) {
-            SectionHeader(title: "Folders") {
+            SectionHeader(title: model.openWindows.isEmpty ? "Folders" : "Other folders") {
                 AssignFolderMenu(label: "Assign…").font(TypeScale.meta.weight(.medium))
             }
             let rows = folderRows
@@ -148,8 +172,9 @@ struct MenuPopover: View {
 
     /// Assigned folders first, then recent VS Code folders that are not assigned.
     private var folderRows: [String] {
-        let assigned = model.routes.map(\.folder)
-        let recent = model.recentFolders.map(\.path).filter { p in !assigned.contains(p) }
+        let open = Set(model.openWindows.map(\.folder))
+        let assigned = model.routes.map(\.folder).filter { !open.contains($0) }
+        let recent = model.recentFolders.map(\.path).filter { p in !assigned.contains(p) && !open.contains(p) }
         return Array((assigned + recent).prefix(6))
     }
 
@@ -397,6 +422,69 @@ private struct AccountRow: View {
         if let five { parts.append("session \(Fmt.percent(five.effectivePercentage(at: model.now))) used") }
         if let seven { parts.append("week \(Fmt.percent(seven.effectivePercentage(at: model.now))) used") }
         return parts.joined(separator: ", ")
+    }
+}
+
+/// A folder with live chats: which account they are on, and the switch.
+private struct OpenWindowLine: View {
+    @EnvironmentObject var model: AppModel
+    let window: OpenWindow
+
+    var body: some View {
+        HStack(spacing: 8) {
+            accountMarks
+            VStack(alignment: .leading, spacing: 1) {
+                Text(Fmt.folderName(window.folder)).font(TypeScale.body).foregroundStyle(Ink.text).lineLimit(1)
+                status
+            }
+            Spacer(minLength: 8)
+            AccountMenu(folder: window.folder)
+        }
+        .padding(.vertical, 6)
+        .contextMenu {
+            Button("Open in VS Code") { model.openInVSCode(window.folder) }
+            Button("Show in Finder") { model.revealInFinder(window.folder) }
+        }
+    }
+
+    /// The accounts the chats actually run on (two marks when they differ).
+    private var accountMarks: some View {
+        let ids = Array(Set(window.sessions.compactMap(\.actualProfileId))).sorted()
+        return HStack(spacing: -6) {
+            ForEach(ids.prefix(2), id: \.self) { id in
+                if let p = model.profile(id: id) { Monogram(profile: p, size: 20) }
+            }
+            if ids.isEmpty { Image(systemName: "questionmark.circle").foregroundStyle(Ink.faint).frame(width: 20) }
+        }
+        .frame(width: 26, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var status: some View {
+        let moves = window.sessions.compactMap { model.move(for: $0) }
+        let stale = window.sessions.filter { if case .stale = $0.state { return true } else { return false } }
+        if let m = moves.first(where: { $0.inProgress }) {
+            let name = model.profile(id: m.toProfileId)?.displayName ?? m.toProfileId
+            Text(m.phase == .waiting ? "Moving to \(name) after the current reply…" : "Switching to \(name)…")
+                .font(TypeScale.meta).foregroundStyle(Ink.data)
+        } else if let failed = moves.first(where: { if case .failed = $0.phase { return true } else { return false } }),
+            case .failed(let why) = failed.phase
+        {
+            Text(why).font(TypeScale.meta).foregroundStyle(Ink.negative).lineLimit(1).help(why)
+        } else if let first = stale.first {
+            HStack(spacing: 6) {
+                Text("\(Fmt.plural(stale.count, "chat")) on the old account").font(TypeScale.meta).foregroundStyle(Ink.warning)
+                Button("Move now") { model.restartOnAssignedAccount(first); stale.dropFirst().forEach(model.restartOnAssignedAccount) }
+                    .buttonStyle(LinkButtonStyle())
+            }
+        } else {
+            Text("\(Fmt.plural(window.sessions.count, "chat")) · \(accountNames)").font(TypeScale.meta).foregroundStyle(Ink.muted)
+        }
+    }
+
+    private var accountNames: String {
+        let names = Set(window.sessions.compactMap { $0.actualProfileId.flatMap(model.profile(id:))?.displayName })
+        return names.isEmpty ? "unknown account" : names.sorted().joined(separator: ", ")
     }
 }
 

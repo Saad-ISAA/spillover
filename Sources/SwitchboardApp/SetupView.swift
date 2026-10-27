@@ -38,6 +38,13 @@ struct SetupView: View {
                 switchLine("Route claude in new terminal windows", isOn: Binding(get: { model.shellConnected }, set: { model.setShell(connected: $0) }))
             }
 
+            settingRow(
+                "Auto",
+                "Folders set to Auto start new chats on the first account below the threshold. Open chats move when their account runs low, after their current reply, with their history."
+            ) {
+                AutoSettings()
+            }
+
             settingRow("Limit tracking", "Each account records its limits through its Claude statusline. Your own statusline keeps working.") {
                 VStack(spacing: 0) {
                     ForEach(Array(model.profiles.enumerated()), id: \.element.id) { i, p in
@@ -167,5 +174,71 @@ private struct EditorRow: View {
             }
         }
         .padding(.vertical, 8)
+    }
+}
+
+private struct AutoSettings: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        let order = model.autoOrder
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Order of preference").font(TypeScale.metaStrong).foregroundStyle(Ink.muted).padding(.bottom, 4)
+            ForEach(Array(order.enumerated()), id: \.element.id) { i, p in
+                if i > 0 { Rule() }
+                HStack(spacing: 10) {
+                    Text("\(i + 1)").font(TypeScale.figure(11)).foregroundStyle(Ink.faint).frame(width: 14)
+                    Monogram(profile: p, size: 20)
+                    Text(p.displayName).font(TypeScale.body).foregroundStyle(Ink.text)
+                    Spacer()
+                    if let peak = model.snapshots[p.id]?.peakPercentage(at: model.now) {
+                        Text(Fmt.percent(peak)).font(TypeScale.meta.monospacedDigit())
+                            .foregroundStyle(model.autoPolicy.isOutOfRoom(model.snapshots[p.id], now: model.now) ? Ink.warning : Ink.faint)
+                    }
+                    IconButton(systemName: "chevron.up", help: "Prefer \(p.displayName) earlier") { move(i, by: -1) }
+                        .disabled(i == 0)
+                    IconButton(systemName: "chevron.down", help: "Prefer \(p.displayName) later") { move(i, by: 1) }
+                        .disabled(i == order.count - 1)
+                }
+                .padding(.vertical, 4)
+            }
+        }
+        Rule()
+        HStack {
+            Text("Move on when an account reaches").font(TypeScale.body).foregroundStyle(Ink.text)
+            Spacer()
+            Picker("Threshold", selection: Binding(
+                get: { Int(model.autoPolicy.threshold) },
+                set: { v in model.updateAutoPolicy { $0.threshold = Double(v) } })
+            ) {
+                Text("80%").tag(80)
+                Text("90%").tag(90)
+                Text("95%").tag(95)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+        }
+        Text("Also when its limit is forecast to run out within \(Int(model.autoPolicy.runOutMinutes)) minutes.")
+            .font(TypeScale.meta).foregroundStyle(Ink.faint)
+        HStack {
+            Text("Move open chats automatically").font(TypeScale.body).foregroundStyle(Ink.text)
+            Spacer()
+            Toggle("", isOn: Binding(
+                get: { model.autoPolicy.moveOpenChats },
+                set: { v in model.updateAutoPolicy { $0.moveOpenChats = v } }))
+            .toggleStyle(.switch).controlSize(.small).labelsHidden()
+        }
+        Text("The first time a chat is reopened, VS Code asks whether Claude Code may open the link. Tick “Do not ask me again” so later moves need no click.")
+            .font(TypeScale.meta).foregroundStyle(Ink.faint)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func move(_ index: Int, by delta: Int) {
+        var ids = model.autoOrder.map(\.id)
+        let j = index + delta
+        guard ids.indices.contains(j) else { return }
+        ids.swapAt(index, j)
+        model.updateAutoPolicy { $0.order = ids }
     }
 }

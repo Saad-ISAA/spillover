@@ -28,6 +28,9 @@ struct Banner: Identifiable, Equatable {
 /// logs runs in the background.
 @MainActor
 final class AppModel: ObservableObject {
+    /// For notification actions, which arrive outside the SwiftUI tree.
+    static weak var shared: AppModel?
+
     let env: SBEnvironment
     let service: AppService
 
@@ -54,6 +57,9 @@ final class AppModel: ObservableObject {
     @Published var now = Date()
     @Published var selectedSection: MainSection? = .overview
     @Published var sessions: [SessionAssessment] = []
+    @Published var autoPolicy = AutoPolicy()
+    /// Chats being moved to another account, by conversation id.
+    @Published var moves: [String: ChatMove] = [:]
 
     private var timer: Timer?
     private var ticks = 0
@@ -61,6 +67,7 @@ final class AppModel: ObservableObject {
     init(env: SBEnvironment = .live()) {
         self.env = env
         self.service = AppService(env: env)
+        Self.shared = self
         refreshInstalledHelpersIfOutdated()
         refreshLocal()
         refreshAuth()
@@ -178,6 +185,7 @@ final class AppModel: ObservableObject {
         statuslineOn = Dictionary(uniqueKeysWithValues: profiles.map { ($0.id, statusline.isInstalled(for: $0)) })
         refreshUsageSnapshots()
         launches = LaunchLog(env: env).tail(50).reversed()
+        autoPolicy = AutoPolicyStore(env: env).current()
         recentFolders = RecentWorkspaces(env: env).folders(limit: 30)
     }
 
@@ -200,7 +208,10 @@ final class AppModel: ObservableObject {
         Task.detached(priority: .utility) {
             let scanner = SessionScanner(env: env)
             let assessed = scanner.assess(scanner.scan())
-            await MainActor.run { self.sessions = assessed }
+            await MainActor.run {
+                self.sessions = assessed
+                self.autoMoveChatsIfNeeded()
+            }
         }
     }
 
@@ -394,8 +405,8 @@ final class AppModel: ObservableObject {
         do {
             let route = try service.assign(folder: folder, to: profileId)
             refreshLocal()
-            let name = profile(id: profileId)?.displayName ?? profileId
-            show(.success, "\((route.folder as NSString).lastPathComponent) → \(name). New Claude sessions there use it.")
+            let name = profileId == Profile.autoID ? "Auto" : (profile(id: profileId)?.displayName ?? profileId)
+            show(.success, "\((route.folder as NSString).lastPathComponent) → \(name). New Claude chats there use it.")
         } catch {
             show(.error, error.localizedDescription)
         }

@@ -64,7 +64,7 @@ struct FoldersView: View {
                 }
             }
 
-            Text("Changes apply to new Claude sessions. A chat that is already open keeps its account until you start a new one.")
+            Text("Switching a folder also moves the chats open in it: each waits for its current reply, then reopens on the new account with its history.")
                 .font(TypeScale.meta)
                 .foregroundStyle(Ink.faint)
         }

@@ -1,10 +1,33 @@
 import AppKit
 import SwiftUI
+import UserNotifications
 
 // Menu bar only: no Dock icon even when running outside an app bundle.
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        if Preferences.isBundled { UNUserNotificationCenter.current().delegate = self }
+    }
+
+    /// "Move work to …" on a near-limit notification.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let info = response.notification.request.content.userInfo
+        if response.actionIdentifier == LimitNotifier.moveAction, let from = info["from"] as? String,
+            let to = info["to"] as? String
+        {
+            Task { @MainActor in AppModel.shared?.moveWork(from: from, to: to) }
+        }
+        completionHandler()
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
     }
 }
 

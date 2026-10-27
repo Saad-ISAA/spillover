@@ -348,43 +348,74 @@ private struct AssignMenuStyle: ViewModifier {
     }
 }
 
-/// The account a folder uses, as a compact chip that opens the account picker.
+/// The account a folder uses, as a compact chip that opens the account picker. Choosing another
+/// account also moves the chats already open in that folder.
 struct AccountMenu: View {
     @EnvironmentObject var model: AppModel
     let folder: String
 
     var body: some View {
         let exact = model.exactRoute(for: folder)
-        let effective = model.assignedProfile(for: folder)
+        let resolution = model.resolution(for: folder)
         Menu {
             ForEach(model.profiles.filter { !$0.isDefault }) { p in
                 Button {
-                    model.assign(folder: folder, to: p.id)
+                    model.switchWindow(folder: folder, to: p.id)
                 } label: {
                     if exact?.profileId == p.id { Label(p.displayName, systemImage: "checkmark") } else { Text(p.displayName) }
                 }
             }
             Divider()
+            Button {
+                model.switchWindow(folder: folder, to: Profile.autoID)
+            } label: {
+                if exact?.profileId == Profile.autoID {
+                    Label("Auto (most room)", systemImage: "checkmark")
+                } else {
+                    Text("Auto (most room)")
+                }
+            }
             Button("Default account (your normal login)") {
-                model.assign(folder: folder, to: Profile.defaultID)
+                model.switchWindow(folder: folder, to: Profile.defaultID)
             }
             if exact != nil {
+                Divider()
                 Button("Remove assignment", role: .destructive) { model.unassign(folder: folder) }
             }
         } label: {
             // Plain text: menu labels drop composite content on macOS.
-            Text(chipText(exact: exact, effective: effective))
+            Text(Self.chipText(exact: exact, resolution: resolution))
         }
         .menuStyle(.button)
         .buttonStyle(.bordered)
         .controlSize(.small)
         .fixedSize()
-        .help("Which account Claude uses in this folder")
+        .help(Self.helpText(exact: exact, resolution: resolution))
     }
 
-    private func chipText(exact: Route?, effective: Profile?) -> String {
-        guard let effective else { return "Default" }
-        return exact == nil ? "\(effective.displayName) ↑" : effective.displayName
+    static func chipText(exact: Route?, resolution: Resolution) -> String {
+        switch resolution {
+        case .unrouted:
+            return "Default"
+        case .refused:
+            return "Blocked"
+        case .routed(let p, let route):
+            let name = route.profileId == Profile.autoID ? "Auto · \(p.displayName)" : p.displayName
+            return exact == nil ? "\(name) · from \(Fmt.folderName(route.folder))" : name
+        }
+    }
+
+    static func helpText(exact: Route?, resolution: Resolution) -> String {
+        switch resolution {
+        case .unrouted: return "No assignment: Claude uses your normal login here."
+        case .refused(let r): return "Claude refuses to start here: \(r.message)"
+        case .routed(let p, let route):
+            var text = route.profileId == Profile.autoID
+                ? "Auto: new chats start on the account with the most room (now \(p.displayName))."
+                : "Claude uses \(p.displayName) here."
+            if exact == nil { text += " Inherited from \(Fmt.shortFolder(route.folder))." }
+            return text
+        }
     }
 }
 

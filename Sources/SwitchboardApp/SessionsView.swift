@@ -14,7 +14,7 @@ struct SessionsView: View {
             let stale = model.staleSessions.count
             if stale > 0 {
                 Notice(icon: "arrow.triangle.2.circlepath", tone: .warning,
-                       text: "\(Fmt.plural(stale, "session")) \(stale == 1 ? "is" : "are") still on an old account. Their folder was assigned to another account after they started. Start a new chat (or reload the window) to switch.")
+                       text: "\(Fmt.plural(stale, "session")) \(stale == 1 ? "is" : "are") still on an old account. Their folder now uses another account. Move them here: each one waits for its current reply, then reopens on the new account with its history.")
             }
 
             byAccount
@@ -42,7 +42,7 @@ struct SessionsView: View {
                 }
             }
 
-            Text("Switchboard reads only each Claude process's folder and its CLAUDE_CONFIG_DIR / SWITCHBOARD_PROFILE variables. Nothing else from the process is read or stored.")
+            Text("Switchboard reads only each Claude process's folder, its CLAUDE_CONFIG_DIR / SWITCHBOARD_PROFILE variables and the conversation id in its arguments. Nothing else from the process is read or stored.")
                 .font(TypeScale.meta)
                 .foregroundStyle(Ink.faint)
         }
@@ -110,7 +110,17 @@ private struct SessionRow: View {
         case .matches:
             Pill(text: "As assigned", tone: .positive)
         case .stale(let expected):
-            Pill(text: "Restart for \(model.profile(id: expected)?.displayName ?? expected)", tone: .warning)
+            let name = model.profile(id: expected)?.displayName ?? expected
+            if let move = model.move(for: assessment), move.inProgress {
+                Pill(text: move.phase == .waiting ? "Moving after this reply" : "Switching…", tone: .data)
+            } else if assessment.session.editor != nil, assessment.session.conversationId != nil {
+                Button("Move to \(name)") { model.restartOnAssignedAccount(assessment) }
+                    .buttonStyle(QuietButtonStyle(tone: .warning))
+                    .help("Waits for the current reply to finish, then reopens this chat on \(name) with its history.")
+            } else {
+                Pill(text: "Restart for \(name)", tone: .warning)
+                    .help("A terminal chat: start it again (claude -r) to switch.")
+            }
         case .refusedNow:
             Pill(text: "Folder now refused", tone: .negative)
         case .unknownAccount:
