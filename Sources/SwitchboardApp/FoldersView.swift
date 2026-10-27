@@ -8,51 +8,56 @@ struct FoldersView: View {
     var body: some View {
         Page(
             title: "Folders",
-            subtitle: "A folder's account also applies to everything inside it. Folders you have not assigned use your normal (Default) login."
+            subtitle: "A folder's account also applies to everything inside it. Folders without an assignment use your normal (Default) login."
         ) {
+            AssignFolderMenu(bordered: true)
+        } content: {
             if let problem = model.routesProblem {
-                Card {
-                    Label("Folder assignments cannot be read", systemImage: "exclamationmark.octagon.fill")
-                        .foregroundStyle(.red)
-                    Text(problem).font(.callout)
-                    Text("Claude refuses to start in any folder until this is fixed, so no session silently uses the wrong account. See Health.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                Notice(icon: "exclamationmark.octagon.fill", tone: .negative,
+                       text: "Folder assignments cannot be read: \(problem) Claude refuses to start in any folder until this is fixed, so no session silently uses the wrong account.") {
+                    Button("Health") { model.selectedSection = .health }.buttonStyle(LinkButtonStyle())
                 }
             }
 
-            HStack {
-                AssignFolderMenu()
-                    .buttonStyle(.borderedProminent)
-                Spacer()
-            }
-
-            Card {
-                Text("Assigned").font(.headline)
+            VStack(alignment: .leading, spacing: 8) {
+                SectionHeader(title: "Assigned", font: TypeScale.section) {
+                    Text(Fmt.plural(model.routes.count, "folder")).font(TypeScale.meta).foregroundStyle(Ink.faint)
+                }
                 if model.routes.isEmpty {
-                    Text("Nothing assigned yet.").foregroundStyle(.secondary)
+                    Text("Nothing assigned yet. Every folder uses your normal login.")
+                        .font(TypeScale.body)
+                        .foregroundStyle(Ink.muted)
+                        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                        .padding(.horizontal, 12)
+                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Ink.border, style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
                 }
-                ForEach(model.routes) { route in
-                    FolderRow(path: route.folder, assigned: true)
-                    if route.id != model.routes.last?.id { Divider() }
+                VStack(spacing: 0) {
+                    ForEach(Array(model.routes.enumerated()), id: \.element.id) { i, route in
+                        if i > 0 { Rule() }
+                        FolderRow(path: route.folder, assigned: true)
+                    }
                 }
             }
 
             let recent = model.recentFolders.filter { r in !model.routes.contains { $0.folder == r.path } }
             if !recent.isEmpty {
-                Card {
-                    Text("Recently opened in VS Code").font(.headline)
-                    ForEach(recent.prefix(15), id: \.path) { entry in
-                        FolderRow(path: entry.path, assigned: false)
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionHeader(title: "Recently opened in VS Code", font: TypeScale.section)
+                    VStack(spacing: 0) {
+                        ForEach(Array(recent.prefix(15).enumerated()), id: \.element.path) { i, entry in
+                            if i > 0 { Rule() }
+                            FolderRow(path: entry.path, assigned: false)
+                        }
                     }
                 }
             }
 
-            Card {
-                Text("Which account will Claude use here?").font(.headline)
+            Panel(padding: 20) {
+                Text("Which account will Claude use here?").font(TypeScale.section).foregroundStyle(Ink.text)
                 HStack {
                     TextField("Folder path", text: $probePath).textFieldStyle(.roundedBorder)
                     Button("Choose…") { if let p = model.chooseFolder() { probePath = p } }
+                        .buttonStyle(QuietButtonStyle())
                 }
                 if !probePath.isEmpty {
                     ResolutionText(resolution: model.resolution(for: probePath))
@@ -60,8 +65,8 @@ struct FoldersView: View {
             }
 
             Text("Changes apply to new Claude sessions. A chat that is already open keeps its account until you start a new one.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(TypeScale.meta)
+                .foregroundStyle(Ink.faint)
         }
     }
 }
@@ -72,14 +77,17 @@ private struct FolderRow: View {
     let assigned: Bool
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: assigned ? "folder.fill" : "folder")
-                .foregroundStyle(assigned ? Color.accentColor : .secondary)
+        HStack(spacing: 12) {
+            if let p = model.assignedProfile(for: path) {
+                Monogram(profile: p, size: 22)
+            } else {
+                Image(systemName: "folder").font(.system(size: 13)).foregroundStyle(Ink.faint).frame(width: 22)
+            }
             VStack(alignment: .leading, spacing: 1) {
-                Text((path as NSString).lastPathComponent).lineLimit(1)
-                Text(Theme.shortFolder(path))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(Fmt.folderName(path)).font(TypeScale.body).foregroundStyle(Ink.text).lineLimit(1)
+                Text(Fmt.parentFolder(path))
+                    .font(TypeScale.meta)
+                    .foregroundStyle(Ink.faint)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
@@ -96,12 +104,14 @@ private struct FolderRow: View {
                     Button("Remove assignment", role: .destructive) { model.unassign(folder: path) }
                 }
             } label: {
-                Image(systemName: "ellipsis.circle")
+                Image(systemName: "ellipsis")
             }
             .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .fixedSize()
+            .help("More")
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 9)
     }
 }
 
@@ -111,13 +121,11 @@ struct ResolutionText: View {
     var body: some View {
         switch resolution {
         case .unrouted:
-            Label("No assignment: your normal (Default) login.", systemImage: "person.crop.circle")
+            Notice(icon: "person.crop.circle", tone: .neutral, text: "No assignment: your normal (Default) login.")
         case .routed(let p, let route):
-            Label("\(p.displayName) — via \(Theme.shortFolder(route.folder))", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+            Notice(icon: "checkmark.circle.fill", tone: .positive, text: "\(p.displayName), via \(Fmt.shortFolder(route.folder)).")
         case .refused(let refusal):
-            Label("Claude would refuse to start: \(refusal.message)", systemImage: "xmark.octagon.fill")
-                .foregroundStyle(.red)
+            Notice(icon: "xmark.octagon.fill", tone: .negative, text: "Claude would refuse to start: \(refusal.message)")
         }
     }
 }

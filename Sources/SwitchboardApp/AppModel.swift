@@ -36,8 +36,11 @@ final class AppModel: ObservableObject {
     @Published var routes: [Route] = []
     @Published var routesProblem: String?
     @Published var snapshots: [String: UsageSnapshot] = [:]
+    @Published var history: [String: [UsagePoint]] = [:]
+    /// The account the popover and overview lead with (nil: the one closest to a limit).
+    @Published var focusedProfileId: String?
     @Published var reports: [String: UsageReport] = [:]
-    @Published var reportDays = 7
+    @Published var reportDays = 14
     @Published var scanning = false
     @Published var recentFolders: [RecentWorkspaces.Entry] = []
     @Published var editorStatus: [Editor: InstallStatus] = [:]
@@ -49,10 +52,11 @@ final class AppModel: ObservableObject {
     @Published var launches: [String] = []
     @Published var banner: Banner?
     @Published var now = Date()
-    @Published var selectedSection: MainSection? = .accounts
+    @Published var selectedSection: MainSection? = .overview
     @Published var sessions: [SessionAssessment] = []
 
     private var timer: Timer?
+    private var ticks = 0
 
     init(env: SBEnvironment = .live()) {
         self.env = env
@@ -61,11 +65,16 @@ final class AppModel: ObservableObject {
         refreshLocal()
         refreshAuth()
         refreshSessions()
+        scanLocalUsage()
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.now = Date()
-                self?.refreshUsageSnapshots()
-                self?.refreshSessions()
+                guard let self else { return }
+                self.now = Date()
+                self.refreshUsageSnapshots()
+                self.refreshSessions()
+                self.ticks += 1
+                // Token totals come from walking session logs: every ten minutes is plenty.
+                if self.ticks % 20 == 0 && !self.scanning { self.scanLocalUsage() }
             }
         }
     }
@@ -97,6 +106,44 @@ final class AppModel: ObservableObject {
             PathNormalizer.normalize($0.folder, caseInsensitive: env.caseInsensitivePaths)?.key == key
         }
     }
+
+    /// The account to lead with: the one picked by the user, else the one closest to a limit.
+    var focusProfile: Profile? {
+        if let id = focusedProfileId, let p = profile(id: id) { return p }
+        let ranked = HeadroomAdvisor.rank(profiles: profiles, snapshots: snapshots, now: now)
+        if let fullest = ranked.last(where: { $0.peakPercentage != nil }) { return fullest.profile }
+        return profiles.first { !$0.isDefault } ?? profiles.first
+    }
+
+    func window(_ kind: UsageWindow.Kind, for profile: Profile) -> UsageWindow? {
+        snapshots[profile.id]?.window(kind)
+    }
+
+    func forecast(_ kind: UsageWindow.Kind, for profile: Profile) -> PaceForecast? {
+        window(kind, for: profile).flatMap { PaceForecast.forecast($0, now: now) }
+    }
+
+    /// The most pressing thing in the data right now, as one sentence (nil when all is calm).
+    var finding: (profile: Profile, text: String, tone: Tone)? {
+        var best: (Profile, String, Tone, Double)?
+        for p in profiles {
+            for kind in [UsageWindow.Kind.fiveHour, .sevenDay] {
+                guard let f = forecast(kind, for: p) else { continue }
+                let (text, tone) = Outlook.sentence(f, now: now)
+                let urgency: Double
+                switch f.outlook {
+                case .full: urgency = 3
+                case .runsOut(_, let early): urgency = 2 + min(early, 86400 * 7) / (86400 * 7)
+                default: continue
+                }
+                if urgency > (best?.3 ?? 0) { best = (p, "\(p.displayName): " + text.prefix(1).lowercased() + text.dropFirst(), tone, urgency) }
+            }
+        }
+        return best.map { ($0.0, $0.1, $0.2) }
+    }
+
+    /// When the freshest limit reading was taken.
+    var lastCapture: Date? { snapshots.values.map(\.capturedAt).max() }
 
     var bestHeadroom: HeadroomAdvisor.Ranked? {
         HeadroomAdvisor.rank(profiles: profiles, snapshots: snapshots, now: now)
@@ -136,6 +183,7 @@ final class AppModel: ObservableObject {
 
     func refreshUsageSnapshots() {
         snapshots = service.usageSnapshots()
+        history = service.usageHistory()
         if UserDefaults.standard.object(forKey: "notifyNearLimit") as? Bool ?? true {
             LimitNotifier.check(snapshots: snapshots, profiles: profiles, now: now)
         }

@@ -61,7 +61,7 @@ enum LimitNotifier {
                 sent.insert(key)
                 let content = UNMutableNotificationContent()
                 content.title = "\(p.displayName): \(Int(pct.rounded()))% of \(w.kind.label.lowercased()) used"
-                content.body = "Resets in \(Theme.countdown(to: w.resetsAt, now: now)). Consider moving new work to another account."
+                content.body = "Resets in \(Fmt.countdown(to: w.resetsAt, now: now)). Consider moving new work to another account."
                 UNUserNotificationCenter.current().add(
                     UNNotificationRequest(identifier: key, content: content, trigger: nil))
             }

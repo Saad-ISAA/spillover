@@ -1,120 +1,214 @@
 import SwiftUI
 import SwitchboardCore
 
-/// Coloured initial used wherever an account is shown.
-struct AccountAvatar: View {
+// MARK: Identity
+
+/// An account's initial on its pale identity tint.
+struct Monogram: View {
     let profile: Profile
     var size: CGFloat = 22
 
     var body: some View {
-        let initial = profile.isDefault ? "D" : String(profile.displayName.prefix(1)).uppercased()
-        Circle()
-            .fill(Theme.color(for: profile).gradient)
+        RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
+            .fill(Identity.tint(for: profile))
             .frame(width: size, height: size)
             .overlay(
-                Text(initial)
+                Text(String(profile.displayName.prefix(1)).uppercased())
                     .font(.system(size: size * 0.5, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Identity.ink(for: profile))
             )
             .accessibilityHidden(true)
     }
 }
 
-struct PlanBadge: View {
+// MARK: Gauges
+
+/// A watch-style open arc (270°, gap at the bottom) showing how much of a limit is used.
+/// The small tick marks where an even pace would be right now.
+struct LoadArc: View {
+    let percent: Double?
+    var paceFraction: Double?
+    var size: CGFloat = 64
+    var lineWidth: CGFloat = 7
+    var showsValue = true
+    var caption: String?
+
+    private let sweep = 0.75
+
+    var body: some View {
+        ZStack {
+            arc(to: 1).stroke(Ink.track, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+            if let percent, percent > 0 {
+                arc(to: min(percent, 100) / 100)
+                    .stroke(Ink.load(percent), style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                    .animation(.easeOut(duration: 0.35), value: percent)
+            }
+            if let paceFraction, paceFraction > 0.02, paceFraction < 0.98 {
+                paceTick(paceFraction)
+            }
+            if showsValue {
+                VStack(spacing: 0) {
+                    Text(percent.map(Fmt.percent) ?? "–")
+                        .font(TypeScale.figure(size * 0.26))
+                        .foregroundStyle(percent == nil ? Ink.faint : Ink.text)
+                    if let caption {
+                        Text(caption).font(.system(size: max(9, size * 0.14), weight: .medium))
+                            .foregroundStyle(Ink.faint)
+                    }
+                }
+            }
+        }
+        .frame(width: size, height: size)
+    }
+
+    /// Arc from the bottom-left (135°) clockwise through the top to the bottom-right (45°).
+    private func arc(to fraction: Double) -> Path {
+        Path { p in
+            let r = (size - lineWidth) / 2
+            p.addArc(
+                center: CGPoint(x: size / 2, y: size / 2), radius: r, startAngle: .degrees(135),
+                endAngle: .degrees(135 + 360 * sweep * fraction), clockwise: false)
+        }
+    }
+
+    private func paceTick(_ fraction: Double) -> some View {
+        let angle = Angle.degrees(135 + 360 * sweep * fraction)
+        let r = (size - lineWidth) / 2
+        let inner = r - lineWidth / 2 - 2, outer = r + lineWidth / 2 + 2
+        let c = CGPoint(x: size / 2, y: size / 2)
+        return Path { p in
+            p.move(to: CGPoint(x: c.x + inner * cos(angle.radians), y: c.y + inner * sin(angle.radians)))
+            p.addLine(to: CGPoint(x: c.x + outer * cos(angle.radians), y: c.y + outer * sin(angle.radians)))
+        }
+        .stroke(Ink.text.opacity(0.55), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+    }
+}
+
+/// A thin horizontal meter with an optional even-pace tick.
+struct MeterBar: View {
+    let percent: Double?
+    var paceFraction: Double?
+    var height: CGFloat = 5
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Ink.track)
+                if let percent, percent > 0 {
+                    Capsule()
+                        .fill(Ink.load(percent))
+                        .frame(width: max(height, geo.size.width * min(percent, 100) / 100))
+                }
+                if let paceFraction, paceFraction > 0.01, paceFraction < 0.99 {
+                    Rectangle()
+                        .fill(Ink.text.opacity(0.55))
+                        .frame(width: 1.5, height: height + 6)
+                        .offset(x: geo.size.width * paceFraction - 0.75)
+                }
+            }
+            .frame(maxHeight: .infinity)
+        }
+        .frame(height: height + 6)
+    }
+}
+
+// MARK: Small marks
+
+struct Pill: View {
     let text: String
+    var tone: Tone = .neutral
 
     var body: some View {
         Text(text)
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 6)
+            .font(.system(size: 11, weight: .medium))
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 7)
             .padding(.vertical, 2)
-            .background(.quaternary, in: Capsule())
-            .foregroundStyle(.secondary)
+            .foregroundStyle(tone == .neutral ? Ink.muted : Ink.tone(tone))
+            .background(Ink.wash(tone), in: Capsule())
     }
 }
 
-/// One usage window: label, bar, percentage and reset countdown.
-struct UsageBar: View {
-    let window: UsageWindow
-    let now: Date
-    var compact = false
-
+struct StatusDot: View {
+    let tone: Tone
     var body: some View {
-        let pct = window.effectivePercentage(at: now)
-        VStack(alignment: .leading, spacing: compact ? 2 : 4) {
-            HStack(spacing: 4) {
-                Text(compact ? window.kind.shortLabel : window.kind.label)
-                    .font(compact ? .caption2 : .caption)
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 4)
-                Text("\(Int(pct.rounded()))%")
-                    .font((compact ? Font.caption2 : Font.caption).monospacedDigit().weight(.medium))
-                if !compact || pct > 0 {
-                    Text("· \(Theme.countdown(to: window.resetsAt, now: now))")
-                        .font((compact ? Font.caption2 : Font.caption).monospacedDigit())
-                        .foregroundStyle(.tertiary)
-                }
-            }
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.quaternary)
-                    Capsule()
-                        .fill(Theme.usageColor(pct).gradient)
-                        .frame(width: max(3, geo.size.width * min(pct, 100) / 100))
-                }
-            }
-            .frame(height: compact ? 4 : 6)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(window.kind.label) \(Int(pct.rounded())) percent used, resets in \(Theme.countdown(to: window.resetsAt, now: now))")
+        Circle().fill(Ink.tone(tone)).frame(width: 6, height: 6).accessibilityHidden(true)
     }
 }
 
-/// Usage windows for a profile, or a hint when nothing has been captured yet.
-struct UsageSummary: View {
-    @EnvironmentObject var model: AppModel
-    let profile: Profile
-    var compact = false
-
-    var body: some View {
-        if let snapshot = model.snapshots[profile.id], !snapshot.windows.isEmpty {
-            VStack(alignment: .leading, spacing: compact ? 4 : 8) {
-                ForEach(snapshot.windows.filter { $0.kind != .spendLimit }, id: \.kind) { w in
-                    UsageBar(window: w, now: model.now, compact: compact)
-                }
-                if !compact {
-                    Text("Updated \(Theme.relative(snapshot.capturedAt, now: model.now))")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
-            }
-        } else if model.statuslineOn[profile.id] == true {
-            Text("Usage appears after the next Claude reply in this account.")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-        } else {
-            Text("Usage tracking off")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-        }
-    }
-}
-
-struct LoginStatusLabel: View {
+/// Login state as a dot and short words.
+struct LoginState: View {
     let status: ProfileStatus?
+    var showsEmail = true
 
     var body: some View {
-        switch status ?? .unknown {
-        case .unknown, .checking:
-            Label("Checking…", systemImage: "ellipsis.circle").foregroundStyle(.secondary)
-        case .loggedIn(let s):
-            Label(s.email.map(Redaction.email) ?? "Logged in", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-        case .loggedOut:
-            Label("Not logged in", systemImage: "exclamationmark.circle.fill").foregroundStyle(.orange)
-        case .error(let e):
-            Label(e, systemImage: "xmark.octagon.fill").foregroundStyle(.red)
+        HStack(spacing: 5) {
+            switch status ?? .unknown {
+            case .unknown, .checking:
+                ProgressView().controlSize(.mini).frame(width: 8, height: 8)
+                Text("Checking login")
+            case .loggedIn(let s):
+                StatusDot(tone: .positive)
+                Text(showsEmail ? (s.email.map(Redaction.email) ?? "Logged in") : "Logged in")
+            case .loggedOut:
+                StatusDot(tone: .warning)
+                Text("Not logged in")
+            case .error(let e):
+                StatusDot(tone: .negative)
+                Text(e).lineLimit(1)
+            }
         }
+        .font(TypeScale.meta)
+        .foregroundStyle(Ink.muted)
+    }
+}
+
+/// Section heading: sentence case, with an optional trailing action.
+struct SectionHeader<Trailing: View>: View {
+    let title: String
+    var font: Font = TypeScale.metaStrong
+    @ViewBuilder var trailing: Trailing
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title).font(font).foregroundStyle(font == TypeScale.metaStrong ? Ink.muted : Ink.text)
+            Spacer(minLength: 8)
+            trailing
+        }
+    }
+}
+
+extension SectionHeader where Trailing == EmptyView {
+    init(title: String, font: Font = TypeScale.metaStrong) {
+        self.init(title: title, font: font) { EmptyView() }
+    }
+}
+
+/// A line of explanation that carries a status: a coloured icon, the words in ink, one action.
+struct Notice<Action: View>: View {
+    let icon: String
+    let tone: Tone
+    let text: String
+    @ViewBuilder var action: Action
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: icon).foregroundStyle(Ink.tone(tone)).font(.system(size: 12, weight: .semibold))
+            Text(text).font(TypeScale.body).foregroundStyle(Ink.text)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 4)
+            action
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Ink.wash(tone), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+extension Notice where Action == EmptyView {
+    init(icon: String, tone: Tone, text: String) {
+        self.init(icon: icon, tone: tone, text: text) { EmptyView() }
     }
 }
 
@@ -123,21 +217,13 @@ struct BannerView: View {
     let dismiss: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: icon).foregroundStyle(tint)
-            Text(banner.text)
-                .font(.callout)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-            Spacer(minLength: 0)
-            Button(action: dismiss) { Image(systemName: "xmark") }
+        Notice(icon: icon, tone: tone, text: banner.text) {
+            Button(action: dismiss) { Image(systemName: "xmark").font(.system(size: 10, weight: .bold)) }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Ink.faint)
                 .accessibilityLabel("Dismiss")
         }
-        .padding(10)
-        .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(tint.opacity(0.3)))
+        .textSelection(.enabled)
     }
 
     private var icon: String {
@@ -148,22 +234,91 @@ struct BannerView: View {
         }
     }
 
-    private var tint: Color {
+    private var tone: Tone {
         switch banner.kind {
-        case .info: return .blue
-        case .success: return .green
-        case .error: return .red
+        case .info: return .neutral
+        case .success: return .positive
+        case .error: return .negative
         }
     }
 }
+
+// MARK: Buttons
+
+/// The one filled action on a screen: ink fill, sheet-coloured label.
+struct PrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(TypeScale.bodyStrong)
+            .foregroundStyle(Ink.sheet)
+            .padding(.horizontal, 12)
+            .frame(height: 28)
+            .background(Ink.text.opacity(configuration.isPressed ? 0.8 : 1), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .opacity(isEnabled ? 1 : 0.4)
+    }
+}
+
+/// Secondary action: sheet fill with a 1px control edge.
+struct QuietButtonStyle: ButtonStyle {
+    var tone: Tone = .neutral
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(TypeScale.body.weight(.medium))
+            .foregroundStyle(tone == .neutral ? Ink.text : Ink.tone(tone))
+            .padding(.horizontal, 10)
+            .frame(height: 26)
+            .background(configuration.isPressed ? Ink.active : Ink.sheet, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(Ink.border))
+            .opacity(isEnabled ? 1 : 0.45)
+    }
+}
+
+/// Text-only action in the data hue.
+struct LinkButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(TypeScale.meta.weight(.medium))
+            .foregroundStyle(Ink.data.opacity(configuration.isPressed ? 0.6 : 1))
+            .contentShape(Rectangle())
+    }
+}
+
+/// Small round icon button for headers (refresh, settings).
+struct IconButton: View {
+    let systemName: String
+    let help: String
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(hovering ? Ink.text : Ink.muted)
+                .frame(width: 26, height: 26)
+                .background(hovering ? Ink.active : .clear, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(help)
+        .accessibilityLabel(help)
+    }
+}
+
+// MARK: Folder ↔ account controls
 
 /// "Assign a folder to…": pick the account first, then the folder.
 struct AssignFolderMenu: View {
     @EnvironmentObject var model: AppModel
     var label = "Assign a folder…"
+    var bordered = false
 
     var body: some View {
-        Menu(label) {
+        Menu {
             let accounts = model.profiles.filter { !$0.isDefault }
             if accounts.isEmpty {
                 Text("Add an account first")
@@ -173,13 +328,27 @@ struct AssignFolderMenu: View {
                     if let folder = model.chooseFolder() { model.assign(folder: folder, to: p.id) }
                 }
             }
+        } label: {
+            Text(label)
         }
-        .menuStyle(.borderlessButton)
+        .modifier(AssignMenuStyle(bordered: bordered))
         .fixedSize()
     }
 }
 
-/// Picker of accounts for a folder, with "Default" meaning "no route".
+private struct AssignMenuStyle: ViewModifier {
+    let bordered: Bool
+
+    func body(content: Content) -> some View {
+        if bordered {
+            content.menuStyle(.button).buttonStyle(.bordered)
+        } else {
+            content.menuStyle(.borderlessButton).menuIndicator(.hidden).foregroundStyle(Ink.data)
+        }
+    }
+}
+
+/// The account a folder uses, as a compact chip that opens the account picker.
 struct AccountMenu: View {
     @EnvironmentObject var model: AppModel
     let folder: String
@@ -203,18 +372,39 @@ struct AccountMenu: View {
                 Button("Remove assignment", role: .destructive) { model.unassign(folder: folder) }
             }
         } label: {
-            // Plain text: menu labels drop composite content (avatars) on macOS.
-            if let effective {
-                Text(exact == nil ? "\(effective.displayName) (inherited)" : effective.displayName)
-            } else {
-                Text("Default")
-            }
+            // Plain text: menu labels drop composite content on macOS.
+            Text(chipText(exact: exact, effective: effective))
         }
         .menuStyle(.button)
         .buttonStyle(.bordered)
         .controlSize(.small)
-        .tint(effective.map(Theme.color(for:)))
         .fixedSize()
         .help("Which account Claude uses in this folder")
     }
+
+    private func chipText(exact: Route?, effective: Profile?) -> String {
+        guard let effective else { return "Default" }
+        return exact == nil ? "\(effective.displayName) ↑" : effective.displayName
+    }
+}
+
+// MARK: Surfaces
+
+/// A bordered panel inside the sheet. No shadow: elevation is the 1px edge.
+struct Panel<Content: View>: View {
+    var padding: CGFloat = 16
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) { content }
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Ink.sheet, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Ink.border))
+    }
+}
+
+/// 1px row rule.
+struct Rule: View {
+    var body: some View { Rectangle().fill(Ink.rule).frame(height: 1) }
 }

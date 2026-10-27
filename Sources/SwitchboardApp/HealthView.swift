@@ -5,37 +5,64 @@ struct HealthView: View {
     @EnvironmentObject var model: AppModel
 
     var body: some View {
-        Page(title: "Health", subtitle: "Read-only checks of files, permissions, logins, editors and terminals.") {
-            HStack {
-                Button(model.checkingHealth ? "Checking…" : "Run checks") { model.runHealthChecks() }
-                    .disabled(model.checkingHealth)
-                Spacer()
-            }
-            Card {
+        let failures = model.health.filter { $0.status == .failure }.count
+        let warnings = model.health.filter { $0.status == .warning }.count
+        Page(
+            title: "Health",
+            subtitle: model.health.isEmpty
+                ? "Read-only checks of files, permissions, logins, editors and terminals."
+                : (failures + warnings == 0 ? "All \(model.health.count) checks pass." : "\(Fmt.plural(failures, "problem")) and \(Fmt.plural(warnings, "warning")) in \(model.health.count) checks."),
+            subtitleTone: failures > 0 ? .negative : (warnings > 0 ? .warning : .neutral)
+        ) {
+            Button(model.checkingHealth ? "Checking…" : "Run checks") { model.runHealthChecks() }
+                .buttonStyle(QuietButtonStyle())
+                .disabled(model.checkingHealth)
+        } content: {
+            VStack(spacing: 0) {
                 if model.health.isEmpty {
-                    Text(model.checkingHealth ? "Checking…" : "No results yet.").foregroundStyle(.secondary)
+                    Text(model.checkingHealth ? "Checking…" : "No results yet.")
+                        .font(TypeScale.body).foregroundStyle(Ink.muted)
+                        .frame(maxWidth: .infinity, minHeight: 60)
                 }
-                ForEach(model.health) { check in
-                    HStack(alignment: .top, spacing: 10) {
-                        Image(systemName: icon(check.status)).foregroundStyle(color(check.status))
+                ForEach(Array(model.health.enumerated()), id: \.element.id) { i, check in
+                    if i > 0 { Rule() }
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Image(systemName: icon(check.status))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Ink.tone(tone(check.status)))
+                            .frame(width: 16)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(check.title).font(.callout.weight(.medium))
-                            Text(check.detail).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                            Text(check.title).font(TypeScale.bodyStrong).foregroundStyle(Ink.text)
+                            Text(check.detail).font(TypeScale.meta).foregroundStyle(Ink.muted).textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
+                        Spacer()
+                    }
+                    .padding(.vertical, 10)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                SectionHeader(title: "Recent launches", font: TypeScale.section)
+                Text("Every time Claude starts through Switchboard: which account it got, or why it was refused. Arguments and prompts are never recorded.")
+                    .font(TypeScale.meta)
+                    .foregroundStyle(Ink.muted)
+                VStack(alignment: .leading, spacing: 4) {
+                    if model.launches.isEmpty {
+                        Text("None yet.").font(TypeScale.body).foregroundStyle(Ink.muted)
+                    }
+                    ForEach(Array(model.launches.prefix(30).enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(Ink.text)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
                     }
                 }
-            }
-            Card {
-                Text("Recent launches").font(.headline)
-                Text("Every time Claude starts through Switchboard: which account it got, or why it was refused. Arguments and prompts are never recorded.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if model.launches.isEmpty {
-                    Text("None yet.").foregroundStyle(.secondary)
-                }
-                ForEach(Array(model.launches.prefix(30).enumerated()), id: \.offset) { _, line in
-                    Text(line).font(.caption.monospaced()).lineLimit(1).truncationMode(.middle).textSelection(.enabled)
-                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Ink.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
         }
         .onAppear { if model.health.isEmpty { model.runHealthChecks() } }
@@ -50,12 +77,12 @@ struct HealthView: View {
         }
     }
 
-    private func color(_ s: HealthCheck.Status) -> Color {
+    private func tone(_ s: HealthCheck.Status) -> Tone {
         switch s {
-        case .ok: return .green
-        case .warning: return .orange
-        case .failure: return .red
-        case .info: return .secondary
+        case .ok: return .positive
+        case .warning: return .warning
+        case .failure: return .negative
+        case .info: return .neutral
         }
     }
 }

@@ -12,84 +12,95 @@ struct SetupView: View {
             title: "Setup",
             subtitle: "Connect the tools that start Claude. Every change is backed up and can be undone here."
         ) {
-            Card {
-                Label("Editors", systemImage: "chevron.left.forwardslash.chevron.right").font(.headline)
-                Text("Switchboard sets one user setting, claudeCode.claudeProcessWrapper, so every new Claude chat in the editor starts in the account assigned to its folder. Your other settings are not touched, and a backup is kept.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+            settingRow(
+                "Editors",
+                "Sets one user setting, claudeCode.claudeProcessWrapper, so every new Claude chat starts in the account assigned to its folder. Nothing else is touched, and a backup is kept."
+            ) {
                 let editors = Editor.allCases.filter { model.editorStatus[$0] != .editorNotFound }
-                if editors.isEmpty {
-                    Text("No VS Code family editor found on this Mac.").foregroundStyle(.secondary)
+                VStack(spacing: 0) {
+                    if editors.isEmpty {
+                        Text("No VS Code family editor found on this Mac.").font(TypeScale.body).foregroundStyle(Ink.muted)
+                    }
+                    ForEach(Array(editors.enumerated()), id: \.element) { i, editor in
+                        if i > 0 { Rule() }
+                        EditorRow(editor: editor, replaceTarget: $replaceTarget)
+                    }
                 }
-                ForEach(editors, id: \.self) { editor in
-                    EditorRow(editor: editor, replaceTarget: $replaceTarget)
-                }
-                Text("After connecting, start a new Claude chat (or reload the window). Chats that are already open keep their account.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text("After connecting, start a new Claude chat (or reload the window). Open chats keep their account.")
+                    .font(TypeScale.meta)
+                    .foregroundStyle(Ink.faint)
             }
 
-            Card {
-                HStack {
-                    Label("Terminals", systemImage: "terminal").font(.headline)
-                    Spacer()
-                    Toggle("", isOn: Binding(get: { model.shellConnected }, set: { model.setShell(connected: $0) }))
-                        .toggleStyle(.switch)
-                        .labelsHidden()
+            settingRow(
+                "Terminals",
+                "Adds a small block to ~/.zshrc that puts Switchboard's claude first on your PATH, so claude in any terminal, including VS Code's, uses the folder's account."
+            ) {
+                switchLine("Route claude in new terminal windows", isOn: Binding(get: { model.shellConnected }, set: { model.setShell(connected: $0) }))
+            }
+
+            settingRow("Limit tracking", "Each account records its limits through its Claude statusline. Your own statusline keeps working.") {
+                VStack(spacing: 0) {
+                    ForEach(Array(model.profiles.enumerated()), id: \.element.id) { i, p in
+                        if i > 0 { Rule() }
+                        HStack(spacing: 10) {
+                            Monogram(profile: p, size: 20)
+                            Text(p.displayName).font(TypeScale.body).foregroundStyle(Ink.text)
+                            Spacer()
+                            Toggle("", isOn: Binding(get: { model.statuslineOn[p.id] ?? false }, set: { model.setStatusline(p, on: $0) }))
+                                .toggleStyle(.switch)
+                                .controlSize(.small)
+                                .labelsHidden()
+                        }
+                        .padding(.vertical, 8)
+                    }
                 }
-                Text("Adds a small block to ~/.zshrc that puts Switchboard's `claude` first on your PATH, so `claude` in any terminal (including VS Code's) uses the folder's account. Applies to new terminal windows.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
             }
 
-            Card {
-                Label("Usage tracking", systemImage: "chart.bar").font(.headline)
-                Text("Turn on “Track limits” per account on the Usage page.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Button("Open Usage") { model.selectedSection = .usage }
-            }
-
-            Card {
-                Label("Preferences", systemImage: "gearshape").font(.headline)
-                Toggle("Open Switchboard at login", isOn: Binding(
-                    get: { prefs.openAtLogin },
-                    set: { on in
-                        do { try prefs.setOpenAtLogin(on) } catch { model.show(.error, error.localizedDescription) }
-                    }))
-                .disabled(!Preferences.isBundled)
-                Toggle("Notify me at 80% and 95% of a limit", isOn: $prefs.notifyNearLimit)
+            settingRow("Preferences", "How Switchboard behaves on this Mac.") {
+                VStack(spacing: 0) {
+                    switchLine("Open Switchboard at login", isOn: Binding(
+                        get: { prefs.openAtLogin },
+                        set: { on in
+                            do { try prefs.setOpenAtLogin(on) } catch { model.show(.error, error.localizedDescription) }
+                        }))
                     .disabled(!Preferences.isBundled)
-                Toggle("Show the fullest limit next to the menu bar icon", isOn: $prefs.showPercentInMenuBar)
+                    Rule()
+                    switchLine("Notify me at 80% and 95% of a limit", isOn: $prefs.notifyNearLimit)
+                        .disabled(!Preferences.isBundled)
+                    Rule()
+                    switchLine("Show the fullest limit next to the menu bar icon", isOn: $prefs.showPercentInMenuBar)
+                }
                 if !Preferences.isBundled {
                     Text("Login item and notifications need the app bundle (scripts/build-app.sh).")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(TypeScale.meta)
+                        .foregroundStyle(Ink.faint)
                 }
             }
 
-            Card {
-                Label("Helpers", systemImage: "shippingbox").font(.headline)
-                HStack {
-                    Image(systemName: model.launcherInstalled ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(model.launcherInstalled ? .green : .secondary)
+            settingRow("Helpers", "Small programs Switchboard runs in place of claude.") {
+                HStack(spacing: 6) {
+                    StatusDot(tone: model.launcherInstalled ? .positive : .neutral)
                     Text(model.launcherInstalled ? "Installed in ~/.switchboard/bin" : "Installed automatically when you connect something")
+                        .font(TypeScale.body)
+                        .foregroundStyle(Ink.text)
                 }
                 Text("Emergency switch: set SWITCHBOARD_BYPASS=1 to run Claude without any routing.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(TypeScale.meta)
+                    .foregroundStyle(Ink.faint)
             }
 
-            Card {
-                Label("Undo everything", systemImage: "arrow.uturn.backward.circle").font(.headline)
-                Text("Restores your editor settings and ~/.zshrc, turns off usage tracking, and removes the helpers. Your accounts, their logins and your folder assignments are kept.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Button("Undo all changes…", role: .destructive) { confirmUndo = true }
+            settingRow(
+                "Undo everything",
+                "Restores your editor settings and ~/.zshrc, turns off limit tracking and removes the helpers. Accounts, their logins and folder assignments are kept."
+            ) {
+                Button("Undo all changes…") { confirmUndo = true }
+                    .buttonStyle(QuietButtonStyle(tone: .negative))
             }
         }
         .confirmationDialog("Undo every change Switchboard made?", isPresented: $confirmUndo, titleVisibility: .visible) {
             Button("Undo all changes", role: .destructive) { model.uninstallEverything() }
+        } message: {
+            Text("Editor settings and ~/.zshrc go back to how they were. Accounts and folder assignments stay.")
         }
         .confirmationDialog(
             "Replace the existing wrapper?", isPresented: Binding(get: { replaceTarget != nil }, set: { if !$0 { replaceTarget = nil } }),
@@ -103,6 +114,34 @@ struct SetupView: View {
             Text("Another tool already set claudeCode.claudeProcessWrapper. Switchboard will remember it and put it back if you disconnect.")
         }
     }
+
+    /// A settings row: title and description on the left, the controls on the right.
+    private func settingRow<C: View>(_ title: String, _ detail: String, @ViewBuilder controls: () -> C) -> some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 32) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title).font(TypeScale.section).foregroundStyle(Ink.text)
+                    Text(detail).font(TypeScale.meta).foregroundStyle(Ink.muted).fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(width: 260, alignment: .leading)
+                VStack(alignment: .leading, spacing: 10) { controls() }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+                    .background(Ink.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .padding(.bottom, 24)
+            Rule()
+        }
+    }
+
+    private func switchLine(_ label: String, isOn: Binding<Bool>) -> some View {
+        HStack {
+            Text(label).font(TypeScale.body).foregroundStyle(Ink.text)
+            Spacer()
+            Toggle("", isOn: isOn).toggleStyle(.switch).controlSize(.small).labelsHidden()
+        }
+        .padding(.vertical, 8)
+    }
 }
 
 private struct EditorRow: View {
@@ -111,23 +150,22 @@ private struct EditorRow: View {
     @Binding var replaceTarget: Editor?
 
     var body: some View {
-        HStack {
-            Text(editor.displayName)
+        HStack(spacing: 8) {
+            Text(editor.displayName).font(TypeScale.body).foregroundStyle(Ink.text)
             Spacer()
             switch model.editorStatus[editor] ?? .notInstalled {
             case .installed:
-                Label("Connected", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                Button("Disconnect") { model.disconnect(editor: editor) }
+                Pill(text: "Connected", tone: .positive)
+                Button("Disconnect") { model.disconnect(editor: editor) }.buttonStyle(QuietButtonStyle())
             case .notInstalled:
-                Button("Connect") { model.connect(editor: editor) }.buttonStyle(.borderedProminent)
+                Button("Connect") { model.connect(editor: editor) }.buttonStyle(PrimaryButtonStyle())
             case .otherWrapper(let value):
-                Label("Another wrapper set", systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
-                    .help(value)
-                Button("Replace…") { replaceTarget = editor }
+                Pill(text: "Another wrapper set", tone: .warning).help(value)
+                Button("Replace…") { replaceTarget = editor }.buttonStyle(QuietButtonStyle())
             case .editorNotFound:
-                Text("Not found").foregroundStyle(.secondary)
+                Text("Not found").font(TypeScale.meta).foregroundStyle(Ink.faint)
             }
         }
+        .padding(.vertical, 8)
     }
 }
