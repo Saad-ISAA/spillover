@@ -55,7 +55,7 @@ struct FoldersView: View {
             Panel(padding: 20) {
                 Text("Which account will Claude use here?").font(TypeScale.section).foregroundStyle(Ink.text)
                 HStack {
-                    TextField("Folder path", text: $probePath).textFieldStyle(.roundedBorder)
+                    TextField("Folder path", text: $probePath).textFieldStyle(.spillover)
                     Button("Choose…") { if let p = model.chooseFolder() { probePath = p } }
                         .buttonStyle(QuietButtonStyle())
                 }

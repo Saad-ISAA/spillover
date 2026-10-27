@@ -107,7 +107,7 @@ private struct AccountCard: View {
                     HStack(spacing: 8) {
                         if renaming {
                             TextField("Name", text: $newName, onCommit: commitRename)
-                                .textFieldStyle(.roundedBorder)
+                                .textFieldStyle(.spillover)
                                 .frame(maxWidth: 220)
                         } else {
                             Text(profile.displayName).font(.system(size: 17, weight: .semibold)).foregroundStyle(Ink.text)
@@ -299,7 +299,7 @@ struct AddAccountSheet: View {
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text("Name").font(TypeScale.bodyStrong).foregroundStyle(Ink.text)
-                TextField("Work", text: $name).textFieldStyle(.roundedBorder)
+                TextField("Work", text: $name).textFieldStyle(.spillover)
             }
 
             Segmented(options: [(0, "New login"), (1, "Existing config folder")], selection: $mode)
@@ -323,7 +323,7 @@ struct AddAccountSheet: View {
                         .font(TypeScale.meta)
                         .foregroundStyle(Ink.muted)
                     HStack {
-                        TextField("/path/to/config", text: $existingDir).textFieldStyle(.roundedBorder)
+                        TextField("/path/to/config", text: $existingDir).textFieldStyle(.spillover)
                         Button("Choose…") {
                             let panel = NSOpenPanel()
                             panel.canChooseDirectories = true

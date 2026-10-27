@@ -216,3 +216,29 @@ struct Segmented<Value: Hashable>: View {
         .fixedSize()
     }
 }
+
+// MARK: Text field
+
+/// Text input on the sheet with a 1px edge that turns to the data hue while editing.
+struct FieldStyle: TextFieldStyle {
+    @FocusState private var focused: Bool
+
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration
+            .textFieldStyle(.plain)
+            .font(TypeScale.body)
+            .foregroundStyle(Ink.text)
+            .focused($focused)
+            .padding(.horizontal, 9)
+            .frame(height: 28)
+            .background(Ink.sheet, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(focused ? Ink.data : Ink.border, lineWidth: focused ? 1.5 : 1))
+            .animation(.easeOut(duration: 0.12), value: focused)
+    }
+}
+
+extension TextFieldStyle where Self == FieldStyle {
+    static var spillover: FieldStyle { FieldStyle() }
+}
