@@ -65,6 +65,15 @@ struct SetupView: View {
 
             settingRow("Preferences", "How Spillover behaves on this Mac.") {
                 VStack(spacing: 0) {
+                    HStack {
+                        Text("Appearance").font(TypeScale.body).foregroundStyle(Ink.text)
+                        Spacer()
+                        Segmented(
+                            options: [("system", "System"), ("light", "Light"), ("dark", "Dark")],
+                            selection: $prefs.appearance)
+                    }
+                    .padding(.vertical, 8)
+                    Rule()
                     switchLine("Open Spillover at login", isOn: Binding(
                         get: { prefs.openAtLogin },
                         set: { on in

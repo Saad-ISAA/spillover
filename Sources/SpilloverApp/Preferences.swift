@@ -29,19 +29,39 @@ final class Preferences: ObservableObject {
         }
     }
 
+    /// "system", "light" or "dark".
+    @Published var appearance: String {
+        didSet {
+            defaults.set(appearance, forKey: "appearance")
+            Self.apply(appearance: appearance)
+        }
+    }
+
     @Published private(set) var openAtLogin: Bool
 
     init() {
         showPercentInMenuBar = defaults.object(forKey: "showPercentInMenuBar") as? Bool ?? false
         notifyNearLimit = defaults.object(forKey: "notifyNearLimit") as? Bool ?? true
+        let look = defaults.string(forKey: "appearance") ?? "system"
+        appearance = look
         let dock = defaults.object(forKey: "alwaysInDock") as? Bool ?? false
         alwaysInDock = dock
         openAtLogin = Self.isBundled && SMAppService.mainApp.status == .enabled
         DockPresence.alwaysShown = dock
+        Self.apply(appearance: look)
     }
 
     /// Login items and notifications need a real app bundle (not a bare development binary).
     nonisolated static var isBundled: Bool { Bundle.main.bundleIdentifier != nil }
+
+    /// The window and the menu bar popover follow this; "system" follows macOS.
+    static func apply(appearance: String) {
+        switch appearance {
+        case "light": NSApplication.shared.appearance = NSAppearance(named: .aqua)
+        case "dark": NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
+        default: NSApplication.shared.appearance = nil
+        }
+    }
 
     func setOpenAtLogin(_ on: Bool) throws {
         guard Self.isBundled else { return }
