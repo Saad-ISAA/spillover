@@ -135,3 +135,6 @@ See [SECURITY.md](SECURITY.md) and [docs/threat-model.md](docs/threat-model.md).
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+Spillover is an independent project. It is not affiliated with or endorsed by Anthropic. Claude and
+Claude Code are trademarks of Anthropic.

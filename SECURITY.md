@@ -12,7 +12,8 @@ Never include real tokens, Keychain contents or personal data in a report.
 
 - Spillover never reads, copies or stores login tokens. It only checks whether a Keychain item
   with a given name exists.
-- It makes no network requests.
+- It makes no network requests of its own. To read limits it runs the official Claude CLI's local
+  `/usage` command, which contacts Anthropic with that account's own login.
 - Its files are owner-only; if they become writable by others, every Claude launch is refused until
   fixed.
 - A folder assigned to an account never silently falls back to another account.
