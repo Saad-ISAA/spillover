@@ -101,13 +101,13 @@ struct UsageView: View {
             Segmented(options: [(7, "7 days"), (14, "14 days"), (30, "30 days")], selection: $model.reportDays)
             Spacer()
             if let profile {
-                Toggle("Track limits", isOn: Binding(
+                Toggle("Live limits in Terminal chats", isOn: Binding(
                     get: { model.statuslineOn[profile.id] ?? false },
                     set: { model.setStatusline(profile, on: $0) }))
                 .toggleStyle(.switch)
                 .controlSize(.small)
                 .font(TypeScale.body)
-                .help("Adds Spillover to this account's Claude statusline to record its limits. Your own statusline keeps working.")
+                .help("Limits are checked every few minutes anyway. This also records them after every reply in Terminal chats, through Claude's statusline; your own statusline keeps working.")
             }
             }
         }

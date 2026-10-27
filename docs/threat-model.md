@@ -18,10 +18,13 @@ User ──► Spillover app / CLI ──► ~/.spillover (owner-only files)
 VS Code extension ──► spillover-launch ──► reads routes/profiles ──► execs real Claude
 Terminal shell ─────► shims/claude ──────┘
 Claude Code ──► spillover statusline (stdin JSON) ──► usage/<profile>.json
+Spillover app ──► claude -p /usage (per account) ──► <account>/.claude.json usage cache ──► usage/<profile>.json
 ```
 
 - Spillover runs entirely as the user. It has no daemon, no privileged helper and no network
-  access.
+  access of its own. To read limits it runs the official Claude CLI's local `/usage` command,
+  which contacts Anthropic with the account's own login; Spillover reads only the usage
+  percentages the CLI caches.
 - The launcher runs on **every** Claude start, so whatever it reads (routes, profiles, its own
   binary) is security-relevant.
 

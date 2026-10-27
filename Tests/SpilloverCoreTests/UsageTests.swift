@@ -193,3 +193,54 @@ final class RedactionTests: XCTestCase {
         XCTAssertEqual(Redaction.email("nobody"), "nobody")
     }
 }
+
+final class AccountUsageFetcherTests: XCTestCase {
+    private let cache = """
+        {"oauthAccount": {"emailAddress": "someone@example.com"},
+         "cachedUsageUtilization": {"fetchedAtMs": 1793000000000, "utilization": {
+           "five_hour": {"utilization": 10, "resets_at": "2026-10-27T17:19:59.861048+00:00"},
+           "seven_day": {"utilization": 13, "resets_at": "2026-10-27T22:59:59+00:00"},
+           "seven_day_opus": null}}}
+        """
+
+    func testParsesOnlyTheUsageCache() {
+        let s = AccountUsageFetcher.parse(stateFile: Data(cache.utf8), profileId: "w")
+        XCTAssertEqual(s?.profileId, "w")
+        XCTAssertEqual(s?.capturedAt, Date(timeIntervalSince1970: 1_793_000_000))
+        XCTAssertEqual(s?.window(.fiveHour)?.usedPercentage, 10)
+        XCTAssertEqual(s?.window(.sevenDay)?.usedPercentage, 13)
+        XCTAssertEqual(
+            s?.window(.sevenDay)?.resetsAt, ISO8601DateFormatter().date(from: "2026-10-27T22:59:59Z"))
+        XCTAssertNil(AccountUsageFetcher.parse(stateFile: Data(#"{"oauthAccount": {}}"#.utf8), profileId: "w"))
+    }
+
+    func testRefreshRunsLocalUsageWithoutASessionAndRecords() throws {
+        let box = try Sandbox()
+        let claude = try box.fakeExecutable("bin/claude")
+        var env = box.env
+        env.processEnv = ["PATH": claude.deletingLastPathComponent().path]
+        let work = try ProfileStore(env: env).create(displayName: "work")
+        try box.write(".spillover/profiles/work/.claude.json", cache)
+        let runner = FakeRunner()
+
+        let snapshot = AccountUsageFetcher(env: env, runner: runner).refresh(work)
+        XCTAssertEqual(snapshot?.window(.sevenDay)?.usedPercentage, 13)
+        let call = try XCTUnwrap(runner.calls.first)
+        XCTAssertEqual(call.args, ["-p", "/usage", "--output-format", "json", "--no-session-persistence"])
+        XCTAssertEqual(call.env?["CLAUDE_CONFIG_DIR"], work.configDir)
+        XCTAssertEqual(call.directory?.lastPathComponent, "usage-check")
+        XCTAssertEqual(UsageStore(env: env).load(profileId: "work")?.window(.fiveHour)?.usedPercentage, 10)
+    }
+
+    func testDefaultReadsTheHomeStateFileAndKeepsANewerReading() throws {
+        let box = try Sandbox()
+        try box.write(".claude.json", cache)
+        let newer = UsageSnapshot(
+            profileId: Profile.defaultID, capturedAt: Date(timeIntervalSince1970: 1_793_000_100),
+            windows: [UsageWindow(kind: .sevenDay, usedPercentage: 20, resetsAt: Date())])
+        try UsageStore(env: box.env).save(newer)
+        let fetched = AccountUsageFetcher(env: box.env, runner: FakeRunner()).refresh(.builtInDefault())
+        XCTAssertEqual(fetched?.window(.sevenDay)?.usedPercentage, 20)
+        XCTAssertEqual(UsageStore(env: box.env).load(profileId: Profile.defaultID)?.window(.sevenDay)?.usedPercentage, 20)
+    }
+}

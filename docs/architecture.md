@@ -69,7 +69,15 @@ launcher or shim, so a launch cannot loop.
 
 ## Usage
 
-Claude Code passes `rate_limits` (5-hour, 7-day, spend limit) to the statusline command on stdin.
+Limits are read the way Claude Code's `/usage` reads them, with no message sent:
+`AccountUsageFetcher` runs `claude -p /usage --output-format json --no-session-persistence` with
+the account's environment, from Spillover's own `tmp/usage-check` folder. That command is local (no
+model request, zero tokens); the CLI asks Anthropic for the account's usage with its own login and
+caches the answer in the account's `.claude.json` (`cachedUsageUtilization`). Spillover reads only
+that key's percentages and reset times. The app does this at launch, every five minutes, on Refresh
+and when the menu bar popover opens after a minute or more.
+
+Optionally, in Terminal chats, Claude Code passes `rate_limits` (5-hour, 7-day, spend limit) to the statusline command on stdin.
 `spillover statusline` stores them per profile (`usage/<profile>.json`) and then runs the user's
 original statusline with the same input. Profile detection: `SPILLOVER_PROFILE` (set by the
 launcher), then `CLAUDE_CONFIG_DIR`, then Default.

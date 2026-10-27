@@ -43,6 +43,7 @@ struct MenuPopover: View {
             Rule()
             footer
         }
+        .onAppear { if !rendersStatically { model.refreshLimitsIfStale() } }
         .frame(width: 380)
         .background(Ink.sheet)
     }
@@ -335,12 +336,11 @@ private struct FocusFace: View {
                     if case .loggedOut = model.statuses[profile.id] {
                         Text("Log in to start using this account.").font(TypeScale.body).foregroundStyle(Ink.text)
                         Button("Log in…") { model.logIn(profile) }.buttonStyle(PrimaryButtonStyle())
-                    } else if model.statuslineOn[profile.id] == true {
-                        Text("Limits appear after the next Claude reply in this account.")
-                            .font(TypeScale.body).foregroundStyle(Ink.text)
+                    } else if model.checkingLimits.contains(profile.id) {
+                        Text("Checking this account's limits…").font(TypeScale.body).foregroundStyle(Ink.text)
                     } else {
-                        Text("Limit tracking is off for this account.").font(TypeScale.body).foregroundStyle(Ink.text)
-                        Button("Track limits") { model.setStatusline(profile, on: true) }.buttonStyle(QuietButtonStyle())
+                        Text("This account reported no limits.").font(TypeScale.body).foregroundStyle(Ink.text)
+                        Button("Check again") { model.refreshLimits() }.buttonStyle(QuietButtonStyle())
                     }
                 }
             }

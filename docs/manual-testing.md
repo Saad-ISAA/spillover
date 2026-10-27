@@ -69,8 +69,9 @@ instead; the existing login must be kept.
 
 ## 8. Usage
 
-- [ ] *Usage → Track limits* on for Work and Personal (your own statusline, if any, still shows).
-- [ ] After a Claude reply in each account, the popover shows 5h / 7d bars for it.
+- [ ] Within a minute of opening the app, every logged-in account shows 5h / 7d limits without
+      sending a message (they match `/usage` in that account).
+- [ ] *Usage → Live limits in Terminal chats* on: your own statusline, if any, still shows.
 - [ ] *Usage → Scan* shows token totals and top folders.
 - [ ] *Setup → Preferences*: open at login, notifications, menu bar percentage.
 

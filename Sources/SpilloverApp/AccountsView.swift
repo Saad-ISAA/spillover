@@ -144,7 +144,7 @@ private struct AccountCard: View {
                     if let s = model.snapshots[profile.id] {
                         Text("Reported \(Fmt.relative(s.capturedAt, now: model.now))").font(TypeScale.meta).foregroundStyle(Ink.faint)
                     } else {
-                        Text(model.statuslineOn[profile.id] == true ? "Appears after the next Claude reply in this account." : "Limit tracking is off. Turn it on under Usage.")
+                        Text(model.checkingLimits.contains(profile.id) ? "Checking this account's limits…" : "No limits reported yet.")
                             .font(TypeScale.meta).foregroundStyle(Ink.faint)
                     }
                 }

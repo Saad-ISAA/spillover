@@ -19,10 +19,11 @@ public struct CommandResult: Sendable, Equatable {
 /// The only way Spillover starts another process (single entry point; fakes implement this in
 /// tests). `Process` is not used anywhere else in the codebase (ArchitectureTests).
 public protocol CommandRunning: Sendable {
-    /// Run to completion with captured output. `env` replaces the environment when non-nil.
+    /// Run to completion with captured output. `env` replaces the environment when non-nil;
+    /// `directory` is the working directory (the caller's when nil).
     func run(
         _ executable: String, _ args: [String], env: [String: String]?, timeout: TimeInterval,
-        stdin: Data?
+        stdin: Data?, directory: URL?
     ) -> CommandResult
 
     /// Run with the caller's terminal attached (interactive login). Returns the exit status.
@@ -33,7 +34,14 @@ extension CommandRunning {
     public func run(
         _ executable: String, _ args: [String], env: [String: String]?, timeout: TimeInterval
     ) -> CommandResult {
-        run(executable, args, env: env, timeout: timeout, stdin: nil)
+        run(executable, args, env: env, timeout: timeout, stdin: nil, directory: nil)
+    }
+
+    public func run(
+        _ executable: String, _ args: [String], env: [String: String]?, timeout: TimeInterval,
+        stdin: Data?
+    ) -> CommandResult {
+        run(executable, args, env: env, timeout: timeout, stdin: stdin, directory: nil)
     }
 }
 
@@ -57,12 +65,13 @@ public struct SystemCommandRunner: CommandRunning {
 
     public func run(
         _ executable: String, _ args: [String], env: [String: String]?, timeout: TimeInterval,
-        stdin: Data?
+        stdin: Data?, directory: URL?
     ) -> CommandResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = args
         if let env { process.environment = env }
+        if let directory { process.currentDirectoryURL = directory }
         let out = Pipe()
         let err = Pipe()
         process.standardOutput = out

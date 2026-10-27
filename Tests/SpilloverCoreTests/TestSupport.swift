@@ -59,6 +59,7 @@ final class FakeRunner: CommandRunning, @unchecked Sendable {
         let args: [String]
         let env: [String: String]?
         let stdin: Data?
+        var directory: URL? = nil
     }
 
     private let lock = NSLock()
@@ -73,10 +74,10 @@ final class FakeRunner: CommandRunning, @unchecked Sendable {
 
     func run(
         _ executable: String, _ args: [String], env: [String: String]?, timeout: TimeInterval,
-        stdin: Data?
+        stdin: Data?, directory: URL?
     ) -> CommandResult {
         lock.lock()
-        _calls.append(Call(executable: executable, args: args, env: env, stdin: stdin))
+        _calls.append(Call(executable: executable, args: args, env: env, stdin: stdin, directory: directory))
         lock.unlock()
         return handler(executable, args)
     }

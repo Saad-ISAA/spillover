@@ -63,6 +63,10 @@ final class AppModel: ObservableObject {
     /// Chats being moved to another account, by conversation id.
     @Published var moves: [String: ChatMove] = [:]
 
+    /// Accounts whose limits are being fetched right now.
+    @Published var checkingLimits: Set<String> = []
+    private var limitsCheckedAt: Date?
+
     private var timer: Timer?
     private var ticks = 0
 
@@ -75,6 +79,7 @@ final class AppModel: ObservableObject {
         refreshAuth()
         refreshSessions()
         scanLocalUsage()
+        refreshLimits()
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
@@ -84,6 +89,7 @@ final class AppModel: ObservableObject {
                 self.ticks += 1
                 // Token totals come from walking session logs: every ten minutes is plenty.
                 if self.ticks % 20 == 0 && !self.scanning { self.scanLocalUsage() }
+                if self.ticks % 10 == 0 { self.refreshLimits() }
             }
         }
     }
@@ -265,6 +271,40 @@ final class AppModel: ObservableObject {
         refreshLocal()
         refreshAuth()
         refreshSessions()
+        refreshLimits()
+    }
+
+    /// Fetches every account's limits the way /usage does, one account at a time, in the
+    /// background. No message is sent and no login data passes through Spillover.
+    func refreshLimits() {
+        guard checkingLimits.isEmpty else { return }
+        let targets = profiles.filter { if case .loggedOut = statuses[$0.id] { return false } else { return true } }
+        guard !targets.isEmpty else { return }
+        limitsCheckedAt = Date()
+        checkingLimits = Set(targets.map(\.id))
+        let env = self.env
+        Task.detached(priority: .utility) {
+            for p in targets {
+                AccountUsageFetcher(env: env).refresh(p)
+                await MainActor.run {
+                    self.checkingLimits.remove(p.id)
+                    self.refreshUsageSnapshots()
+                }
+            }
+        }
+    }
+
+    /// For views that show limits: refresh when the last check is more than a minute old.
+    func refreshLimitsIfStale() {
+        if let at = limitsCheckedAt, Date().timeIntervalSince(at) < 60 { return }
+        refreshLimits()
+    }
+
+    /// Why an account shows no limits yet.
+    func limitsHint(for profile: Profile) -> String {
+        if case .loggedOut = statuses[profile.id] { return "not logged in" }
+        if checkingLimits.contains(profile.id) || statuses[profile.id] == nil { return "checking…" }
+        return "no reading"
     }
 
     func runHealthChecks() {
@@ -524,19 +564,6 @@ final class AppModel: ObservableObject {
             let steps = Setup(env: env).disconnectShell()
             refreshLocal()
             if let bad = steps.first(where: { !$0.ok }) { show(.error, bad.detail) }
-        }
-    }
-
-    /// Limit tracking for every account in one step (accounts usually share one settings.json).
-    func trackLimitsEverywhere() {
-        guard installBinariesIfNeeded() else { return }
-        let setup = Setup(env: env)
-        let failed = profiles.filter { statuslineOn[$0.id] != true }.map { setup.connectStatusline(for: $0) }.filter { !$0.ok }
-        refreshLocal()
-        if let f = failed.first {
-            show(.error, f.detail)
-        } else {
-            show(.success, "Limit tracking is on. Each account's limits appear after its next Claude reply.")
         }
     }
 

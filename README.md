@@ -52,7 +52,7 @@ The app is ad-hoc signed. On another Mac, the first launch needs right-click →
 1. **Accounts → Add account.** Name it (e.g. *Work*), choose which of your existing settings, skills and commands to reuse, and log in: a Terminal window opens the official `claude auth login`. Log in with the subscription you want for that account. Repeat for each subscription.
 2. **Folders → Assign a folder…** Pick the account, then the project folder. Recent VS Code folders are listed with a one-click account picker.
 3. **Setup → Visual Studio Code → Connect.** Then start a new Claude chat (or reload the window).
-4. Optional: **Setup → Terminals** so `claude` in any terminal follows the same assignments, and **Usage → Track limits** for each account.
+4. Optional: **Setup → Terminals** so `claude` in any terminal follows the same assignments, and **Usage → Live limits in Terminal chats** if you want limits updated after every Terminal reply.
 
 Already using `CLAUDE_CONFIG_DIR` folders by hand? **Accounts → Add account → Existing config folder** adopts them and keeps their logins.
 
@@ -63,13 +63,13 @@ Already using `CLAUDE_CONFIG_DIR` folders by hand? **Accounts → Add account �
 | `~/.spillover/` | Its own state: accounts, folder assignments, launcher, logs, backups | delete the folder |
 | VS Code user `settings.json` | one key: `claudeCode.claudeProcessWrapper` (backup kept) | Setup → Disconnect |
 | `~/.zshrc` | a marked block that puts `~/.spillover/shims` first on `PATH` (only if you turn on Terminals) | Setup → Terminals off |
-| An account's Claude `settings.json` | `statusLine` set to Spillover's usage recorder; your own statusline keeps running (only if you turn on Track limits) | Usage → Track limits off |
+| An account's Claude `settings.json` | `statusLine` set to Spillover's usage recorder; your own statusline keeps running (only if you turn on Live limits in Terminal chats) | Usage → Live limits in Terminal chats off |
 
 **Setup → Undo all changes** reverts every row above in one step. Accounts, logins and folder assignments are kept.
 
 ## Usage limits
 
-Claude Code passes subscription limits (5-hour and 7-day usage with reset times) to the configured statusline command. With *Track limits* on, Spillover records them per account whenever you use that account, and shows them in the menu bar. Limits are as fresh as your last Claude reply in that account; the app shows when each value was captured.
+Spillover checks every account's 5-hour and weekly limits every few minutes, the same way Claude Code's `/usage` does and without sending a message: it runs `claude -p /usage` for the account (a local command that uses no tokens) and reads the usage that Claude caches in the account's `.claude.json`. Spillover never reads your login. Optionally, *Usage → Live limits in Terminal chats* also records limits after every reply in Terminal chats, through Claude's statusline.
 
 Token totals come from each account's local session logs (`projects/**/*.jsonl`). Spillover reads only the usage counters, model and folder of each reply. It ships no prices; to see estimated cost, add your own `~/.spillover/prices.json`:
 
