@@ -1,4 +1,8 @@
-# Spillover
+<p align="center">
+  <img src="docs/icon.png" width="128" height="128" alt="Spillover icon: a full cup pouring into a cup with room">
+</p>
+
+<h1 align="center">Spillover</h1>
 
 **One Claude subscription per folder, window and terminal — on the same Mac.**
 
@@ -126,11 +130,7 @@ After connecting anything in the app, the CLI is at `~/.spillover/bin/spillover`
 
 ## Security
 
-See [SECURITY.md](SECURITY.md) and [docs/threat-model.md](docs/threat-model.md). In short: no token access, owner-only files, fail-closed routing, no network access, and every change reversible.
-
-## Acknowledgements
-
-Inspired by [CodexBar](https://github.com/steipete/CodexBar), which pioneered menu bar usage tracking for AI coding tools.
+See [SECURITY.md](SECURITY.md) and [docs/threat-model.md](docs/threat-model.md). In short: no token access, owner-only files, fail-closed routing, no network access of its own (limits are read through the official Claude CLI), and every change reversible.
 
 ## License
 
