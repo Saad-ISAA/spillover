@@ -611,20 +611,6 @@ final class AppModel: ObservableObject {
              failures.isEmpty ? "Everything Spillover changed has been undone. Accounts and folders are kept." : failures.map(\.detail).joined(separator: "\n"))
     }
 
-    func importLegacy() {
-        do {
-            let summary = try LegacyImport(env: env).run()
-            refreshAll()
-            show(.success, "Imported \(summary.adoptedProfiles.count) account(s) and \(summary.routes.count) folder(s).")
-        } catch {
-            show(.error, "Nothing to import: \(error.localizedDescription)")
-        }
-    }
-
-    var legacySetupExists: Bool {
-        FileManager.default.fileExists(atPath: LegacyImport(env: env).defaultRoutesFile.path)
-    }
-
     // MARK: Banner
 
     func show(_ kind: Banner.Kind, _ text: String) {

@@ -335,16 +335,6 @@ struct Commands {
         lines.forEach { Out.line($0) }
     }
 
-    func importLegacy(_ args: Args) throws {
-        let importer = LegacyImport(env: env)
-        let file = args.positional(1).map { URL(fileURLWithPath: $0) }
-        let summary = try importer.run(routesFile: file)
-        summary.adoptedProfiles.forEach { Out.line("✓ adopted profile \($0)") }
-        summary.reusedProfiles.forEach { Out.line("· reused profile \($0)") }
-        summary.routes.forEach { Out.line("✓ \($0)") }
-        summary.skipped.forEach { Out.line("✗ skipped \($0)") }
-    }
-
     func open(_ args: Args) throws {
         guard let folder = args.positional(1) else { throw CLIError.usage("spillover open <folder> [--editor code]") }
         let editor = Editor(rawValue: args.option("editor") ?? "code") ?? .code

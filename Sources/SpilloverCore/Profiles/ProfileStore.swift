@@ -51,7 +51,7 @@ public final class ProfileStore {
         }
     }
 
-    /// Register an existing config directory (e.g. one created by the prototype). The directory is
+    /// Register an existing config directory (e.g. one set up by hand). The directory is
     /// left exactly as it is; only the registry changes.
     @discardableResult
     public func adopt(displayName: String, directory: String) throws -> Profile {

@@ -10,11 +10,6 @@ struct AccountsView: View {
             title: "Accounts",
             subtitle: "Each account is a separate Claude login. Folders assigned to an account start every Claude session there."
         ) {
-            if model.legacySetupExists {
-                Button("Import earlier setup") { model.importLegacy() }
-                    .buttonStyle(QuietButtonStyle())
-                    .help("Adopt accounts and folders from ~/.aibar/routes.tsv")
-            }
             Button {
                 showingAdd = true
             } label: {

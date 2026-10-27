@@ -27,7 +27,6 @@ let help = """
       spillover sessions                      Running Claude sessions and their accounts
       spillover doctor [--no-keychain]        Health checks (read-only)
       spillover log [N]                       Recent launch decisions
-      spillover import-legacy [routes.tsv]    Import a hand-made routes.tsv setup
       spillover open <folder> [--editor code] Open a folder in an editor
 
     Emergency: SPILLOVER_BYPASS=1 runs Claude without routing.
@@ -63,8 +62,6 @@ do {
         commands.doctor(args)
     case "log":
         commands.log(args)
-    case "import-legacy":
-        try commands.importLegacy(args)
     case "open":
         try commands.open(args)
     case let other?:

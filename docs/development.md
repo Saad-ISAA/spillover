@@ -21,7 +21,7 @@ Sources/SpilloverCore/
   Integrations/   JSONC editor, VS Code installer, extension contract, recent workspaces
   Usage/          statusline capture/installer, local token scanner, headroom advisor
   Doctor/         read-only health checks
-  Service/        AppService (shared by CLI and app), Setup, legacy import
+  Service/        AppService (shared by CLI and app), Setup
 Sources/spillover/          CLI
 Sources/spillover-launch/   launcher
 Sources/SpilloverApp/       menu bar app

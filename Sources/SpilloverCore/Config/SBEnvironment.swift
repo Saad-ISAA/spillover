@@ -76,6 +76,4 @@ public struct SBPaths: Sendable {
 
     /// The default Claude Code config dir (`~/.claude`). It is the "Default" profile.
     public var defaultClaudeDir: URL { env.home.appendingPathComponent(".claude", isDirectory: true) }
-    /// Where the prototype stored its profiles and routes (`~/.aibar`), for one-shot import.
-    public var prototypeRoot: URL { env.home.appendingPathComponent(".aibar", isDirectory: true) }
 }
