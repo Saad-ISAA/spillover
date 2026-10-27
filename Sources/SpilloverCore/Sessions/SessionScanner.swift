@@ -44,6 +44,9 @@ public struct SessionAssessment: Equatable, Sendable, Identifiable {
         case refusedNow
         /// Started with a config directory Spillover does not know.
         case unknownAccount
+        /// A short background run (a plugin or tool) in a temporary folder. It keeps the account
+        /// of the chat that started it and is never moved.
+        case background
     }
 
     public let session: RunningSession
@@ -78,6 +81,7 @@ public struct SessionScanner {
         guard let info = basicInfo(pid), info.uid == getuid() else { return nil }
         guard let args = procArgs(pid) else { return nil }
         let parsed = parseProcArgs(args)
+        guard isChat(argv: Array(parsed.argv.dropFirst())) else { return nil }
         return RunningSession(
             pid: pid, executable: path, cwd: workingDirectory(pid),
             configDir: parsed.env[ProfileEnvironment.configDirKey],
@@ -95,6 +99,9 @@ public struct SessionScanner {
             let actual = Self.profileId(for: s, profiles: profiles, caseInsensitive: env.caseInsensitivePaths)
             guard let cwd = s.cwd else {
                 return SessionAssessment(session: s, actualProfileId: actual, state: actual == nil ? .unknownAccount : .matches)
+            }
+            if isTemporaryFolder(cwd) {
+                return SessionAssessment(session: s, actualProfileId: actual, state: .background)
             }
             let expected: String
             switch resolver.resolve(cwd: cwd) {
@@ -117,6 +124,20 @@ public struct SessionScanner {
             return SessionAssessment(
                 session: s, actualProfileId: actual, state: actual == expected ? .matches : .stale(expected: expected))
         }
+    }
+
+    /// Claude processes that are not chats: the Chrome extension's native host, and commands such
+    /// as `claude mcp serve` or `claude auth status`.
+    static func isChat(argv: [String]) -> Bool {
+        if argv.contains("--chrome-native-host") { return false }
+        let services: Set<String> = ["mcp", "auth", "doctor", "update", "install", "setup-token", "plugin", "config"]
+        if let first = argv.first, !first.hasPrefix("-"), services.contains(first) { return false }
+        return true
+    }
+
+    /// Temporary folders, where plugins and tools run short background Claude jobs.
+    func isTemporaryFolder(_ path: String) -> Bool {
+        env.temporaryFolders.contains { !$0.isEmpty && path.hasPrefix($0) }
     }
 
     public static func profileId(for s: RunningSession, profiles: [Profile], caseInsensitive: Bool) -> String? {

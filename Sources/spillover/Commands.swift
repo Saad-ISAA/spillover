@@ -296,6 +296,7 @@ struct Commands {
             case .stale(let expected): state = "restart → \(expected)"
             case .refusedNow: state = "folder refused now"
             case .unknownAccount: state = "unknown account"
+            case .background: state = "background helper"
             }
             rows.append([
                 "\(a.session.pid)", a.actualProfileId ?? "?", state, a.session.cwd ?? "?",

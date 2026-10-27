@@ -51,6 +51,24 @@ final class SessionScannerTests: XCTestCase {
         XCTAssertEqual(states, [.matches, .stale(expected: personal.id), .matches, .unknownAccount])
     }
 
+    func testHelpersAreNotChats() throws {
+        XCTAssertFalse(SessionScanner.isChat(argv: ["--chrome-native-host"]))
+        XCTAssertFalse(SessionScanner.isChat(argv: ["mcp", "serve"]))
+        XCTAssertFalse(SessionScanner.isChat(argv: ["auth", "status", "--json"]))
+        XCTAssertTrue(SessionScanner.isChat(argv: ["--output-format", "stream-json", "--resume=abc"]))
+        XCTAssertTrue(SessionScanner.isChat(argv: []))
+
+        // A run in a temporary folder keeps the account of the chat that started it.
+        let box = try Sandbox()
+        let tmp = try box.mkdir("tmp/plugin-run")
+        var env = box.env
+        env.temporaryFolders = [box.home.appendingPathComponent("tmp").path + "/"]
+        let work = try ProfileStore(env: env).create(displayName: "work")
+        let run = RunningSession(
+            pid: 9, executable: "claude", cwd: tmp.path, configDir: work.configDir, spilloverProfile: nil, startedAt: nil)
+        XCTAssertEqual(SessionScanner(env: env).assess([run]).map(\.state), [.background])
+    }
+
     func testLiveScanOnlyReturnsClaudeProcessesOfThisUser() throws {
         // Smoke test against the real process table: must not crash and must only list "claude".
         let box = try Sandbox()

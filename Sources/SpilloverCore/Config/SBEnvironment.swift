@@ -15,6 +15,8 @@ public struct SBEnvironment: Sendable {
     public var processEnv: [String: String]
     /// macOS volumes are case-insensitive by default; path comparison follows this flag.
     public var caseInsensitivePaths: Bool
+    /// Folders where plugins and tools run short background Claude jobs (empty unless live).
+    public var temporaryFolders: [String] = []
 
     public init(
         home: URL,
@@ -42,8 +44,10 @@ public struct SBEnvironment: Sendable {
         // Case sensitivity follows the volume that holds the home folder (APFS can be either).
         let values = try? home.resourceValues(forKeys: [.volumeSupportsCaseSensitiveNamesKey])
         let caseSensitive = values?.volumeSupportsCaseSensitiveNames ?? false
-        return SBEnvironment(
+        var live = SBEnvironment(
             home: home, appRoot: root, processEnv: env, caseInsensitivePaths: !caseSensitive)
+        live.temporaryFolders = ["/tmp/", "/private/tmp/", "/var/folders/", "/private/var/folders/", NSTemporaryDirectory()]
+        return live
     }
 
     public var paths: SBPaths { SBPaths(env: self) }

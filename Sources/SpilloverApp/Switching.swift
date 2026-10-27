@@ -50,18 +50,13 @@ extension AppModel {
         var groups: [String: [SessionAssessment]] = [:]
         for a in sessions {
             // Background helpers run Claude from temporary folders; they are not windows.
-            guard let cwd = a.session.cwd, !Self.isTemporary(cwd) else { continue }
+            guard let cwd = a.session.cwd, a.state != .background else { continue }
             var folder = cwd
             if case .routed(_, let route) = resolution(for: cwd) { folder = route.folder }
             if groups[folder] == nil { order.append(folder) }
             groups[folder, default: []].append(a)
         }
         return order.map { OpenWindow(folder: $0, sessions: groups[$0] ?? []) }
-    }
-
-    nonisolated static func isTemporary(_ path: String) -> Bool {
-        ["/tmp/", "/private/tmp/", "/var/folders/", "/private/var/folders/"].contains { path.hasPrefix($0) }
-            || path.hasPrefix(NSTemporaryDirectory())
     }
 
     /// Give a folder another account and move the chats already open in it.

@@ -127,6 +127,9 @@ private struct SessionRow: View {
         case .unknownAccount:
             Pill(text: "Not a Spillover account")
                 .help("Started with a CLAUDE_CONFIG_DIR that is not one of your accounts. Add it under Accounts → Existing config folder.")
+        case .background:
+            Pill(text: "Background helper")
+                .help("A short run by a plugin or tool in a temporary folder. It uses the account of the chat that started it.")
         }
     }
 }
