@@ -183,9 +183,9 @@ final class AppModel: ObservableObject {
         shellConnected = shim.defaultRCFiles().contains(where: RCFile.hasBlock(at:))
         let statusline = StatuslineInstaller(env: env)
         statuslineOn = Dictionary(uniqueKeysWithValues: profiles.map { ($0.id, statusline.isInstalled(for: $0)) })
+        autoPolicy = AutoPolicyStore(env: env).current()
         refreshUsageSnapshots()
         launches = LaunchLog(env: env).tail(50).reversed()
-        autoPolicy = AutoPolicyStore(env: env).current()
         recentFolders = RecentWorkspaces(env: env).folders(limit: 30)
     }
 
@@ -193,7 +193,7 @@ final class AppModel: ObservableObject {
         snapshots = service.usageSnapshots()
         history = service.usageHistory()
         if UserDefaults.standard.object(forKey: "notifyNearLimit") as? Bool ?? true {
-            LimitNotifier.check(snapshots: snapshots, profiles: profiles, now: now)
+            LimitNotifier.check(snapshots: snapshots, profiles: profiles, policy: autoPolicy, now: now)
         }
     }
 
@@ -235,7 +235,10 @@ final class AppModel: ObservableObject {
                 case .success(let s): status = s.loggedIn ? .loggedIn(s) : .loggedOut
                 case .failure(let e): status = .error(e.localizedDescription)
                 }
-                await MainActor.run { self.statuses[p.id] = status }
+                await MainActor.run {
+                    self.statuses[p.id] = status
+                    self.syncAutoAvailability()
+                }
             }
         }
     }

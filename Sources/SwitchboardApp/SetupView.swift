@@ -191,7 +191,9 @@ private struct AutoSettings: View {
                     Monogram(profile: p, size: 20)
                     Text(p.displayName).font(TypeScale.body).foregroundStyle(Ink.text)
                     Spacer()
-                    if let peak = model.snapshots[p.id]?.peakPercentage(at: model.now) {
+                    if model.autoPolicy.unavailable.contains(p.id) {
+                        Pill(text: "Not logged in, skipped", tone: .warning)
+                    } else if let peak = model.snapshots[p.id]?.peakPercentage(at: model.now) {
                         Text(Fmt.percent(peak)).font(TypeScale.meta.monospacedDigit())
                             .foregroundStyle(model.autoPolicy.isOutOfRoom(model.snapshots[p.id], now: model.now) ? Ink.warning : Ink.faint)
                     }

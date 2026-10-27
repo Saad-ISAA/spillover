@@ -61,7 +61,7 @@ enum LimitNotifier {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
-    static func check(snapshots: [String: UsageSnapshot], profiles: [Profile], now: Date = Date()) {
+    static func check(snapshots: [String: UsageSnapshot], profiles: [Profile], policy: AutoPolicy, now: Date = Date()) {
         guard Preferences.isBundled else { return }
         let defaults = UserDefaults.standard
         var sent = Set(defaults.stringArray(forKey: "sentLimitNotifications") ?? [])
@@ -76,7 +76,6 @@ enum LimitNotifier {
                 let content = UNMutableNotificationContent()
                 content.title = "\(p.displayName): \(Int(pct.rounded()))% of \(w.kind.label.lowercased()) used"
                 let others = profiles.filter { $0.id != p.id }
-                let policy = AutoPolicy()
                 if let target = policy.choose(profiles: others, snapshots: snapshots, now: now),
                     !policy.isOutOfRoom(snapshots[target.id], now: now)
                 {

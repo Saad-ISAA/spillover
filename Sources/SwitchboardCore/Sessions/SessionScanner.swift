@@ -119,7 +119,7 @@ public struct SessionScanner {
         }
     }
 
-    static func profileId(for s: RunningSession, profiles: [Profile], caseInsensitive: Bool) -> String? {
+    public static func profileId(for s: RunningSession, profiles: [Profile], caseInsensitive: Bool) -> String? {
         guard let dir = s.configDir, !dir.isEmpty else { return Profile.defaultID }
         let key = PathNormalizer.normalize(dir, caseInsensitive: caseInsensitive)?.key
         return profiles.first { p in

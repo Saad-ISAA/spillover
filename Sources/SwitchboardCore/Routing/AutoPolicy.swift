@@ -14,20 +14,56 @@ public struct AutoPolicy: Codable, Equatable, Sendable {
     public var threshold: Double = 90
     public var runOutMinutes: Double = 30
     public var moveOpenChats = true
+    /// Accounts Auto must not use right now (kept up to date by the app: not logged in).
+    public var unavailable: [String] = []
 
-    public init(order: [String] = [], threshold: Double = 90, runOutMinutes: Double = 30, moveOpenChats: Bool = true) {
+    public init(
+        order: [String] = [], threshold: Double = 90, runOutMinutes: Double = 30, moveOpenChats: Bool = true,
+        unavailable: [String] = []
+    ) {
         self.order = order
         self.threshold = threshold
         self.runOutMinutes = runOutMinutes
         self.moveOpenChats = moveOpenChats
+        self.unavailable = unavailable
     }
 
-    /// The accounts Auto chooses from, in preference order.
+    private enum CodingKeys: String, CodingKey {
+        case version, order, threshold, runOutMinutes, moveOpenChats, unavailable
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decode(Int.self, forKey: .version)
+        order = try c.decodeIfPresent([String].self, forKey: .order) ?? []
+        threshold = try c.decodeIfPresent(Double.self, forKey: .threshold) ?? 90
+        runOutMinutes = try c.decodeIfPresent(Double.self, forKey: .runOutMinutes) ?? 30
+        moveOpenChats = try c.decodeIfPresent(Bool.self, forKey: .moveOpenChats) ?? true
+        unavailable = try c.decodeIfPresent([String].self, forKey: .unavailable) ?? []
+    }
+
+    /// The accounts Auto may choose from, in preference order: listed, not marked unavailable,
+    /// and with their config folder present.
     public func candidates(from profiles: [Profile]) -> [Profile] {
+        var ordered = profiles
+        if !order.isEmpty {
+            let byID = Dictionary(uniqueKeysWithValues: profiles.map { ($0.id, $0) })
+            let listed = order.compactMap { byID[$0] }
+            if !listed.isEmpty { ordered = listed }
+        }
+        return ordered.filter { p in
+            guard !unavailable.contains(p.id) else { return false }
+            guard let dir = p.configDir else { return true }
+            var isDir: ObjCBool = false
+            return FileManager.default.fileExists(atPath: dir, isDirectory: &isDir) && isDir.boolValue
+        }
+    }
+
+    /// Every account in preference order, for display (including unavailable ones).
+    public func ordered(_ profiles: [Profile]) -> [Profile] {
         guard !order.isEmpty else { return profiles }
-        let byID = Dictionary(uniqueKeysWithValues: profiles.map { ($0.id, $0) })
-        let listed = order.compactMap { byID[$0] }
-        return listed.isEmpty ? profiles : listed
+        let rank = Dictionary(uniqueKeysWithValues: order.enumerated().map { ($1, $0) })
+        return profiles.sorted { (rank[$0.id] ?? Int.max) < (rank[$1.id] ?? Int.max) }
     }
 
     /// True when the account should not take new work (or keep open chats) under this policy.
@@ -44,9 +80,18 @@ public struct AutoPolicy: Codable, Equatable, Sendable {
         return false
     }
 
-    /// The account Auto uses right now. Nil only when there are no accounts at all.
-    public func choose(profiles: [Profile], snapshots: [String: UsageSnapshot], now: Date = Date()) -> Profile? {
+    /// The account Auto uses right now. `preferring` (the account that already holds a resumed
+    /// conversation) wins while it still has room, so a chat does not hop back and forth. Nil
+    /// only when no account is usable.
+    public func choose(
+        profiles: [Profile], snapshots: [String: UsageSnapshot], now: Date = Date(), preferring: String? = nil
+    ) -> Profile? {
         let candidates = candidates(from: profiles)
+        if let preferring, let p = candidates.first(where: { $0.id == preferring }),
+            !isOutOfRoom(snapshots[p.id], now: now)
+        {
+            return p
+        }
         if let roomy = candidates.first(where: { !isOutOfRoom(snapshots[$0.id], now: now) }) { return roomy }
         return candidates.min {
             (snapshots[$0.id]?.peakPercentage(at: now) ?? 0) < (snapshots[$1.id]?.peakPercentage(at: now) ?? 0)

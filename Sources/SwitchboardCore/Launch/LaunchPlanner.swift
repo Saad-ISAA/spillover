@@ -49,7 +49,13 @@ public struct LaunchPlanner {
 
     public func plan(_ request: LaunchRequest) -> LaunchDecision {
         let bypass = request.environment["SWITCHBOARD_BYPASS"] == "1"
-        let resolution: Resolution = bypass ? .unrouted : resolver.resolve(cwd: request.cwd)
+        let conversation = bypass ? nil : ConversationID.from(args: request.args)
+        let profiles = (try? ProfileStore(env: env).all()) ?? [Profile.builtInDefault()]
+        // A resumed chat in an Auto folder stays on the account that already has it, while it has room.
+        let holder = conversation.flatMap {
+            ConversationStore(env: env).holders(id: $0, cwd: request.cwd, among: profiles).first?.profile.id
+        }
+        let resolution: Resolution = bypass ? .unrouted : resolver.resolve(cwd: request.cwd, preferring: holder)
 
         if case .refused(let refusal) = resolution {
             log.append(
@@ -76,8 +82,8 @@ public struct LaunchPlanner {
             outcome = route.profileId == Profile.autoID ? "routed:auto" : "routed"
             target = profile
         }
-        if !bypass, let conversation = ConversationID.from(args: request.args) {
-            outcome += handOff(conversation, cwd: request.cwd, to: target)
+        if let conversation {
+            outcome += handOff(conversation, cwd: request.cwd, to: target, among: profiles)
         }
         log.append(mode: request.mode, cwd: request.cwd, profile: profileID, outcome: outcome)
         return .exec(
@@ -87,15 +93,24 @@ public struct LaunchPlanner {
 
     /// A resumed conversation must exist in the account it starts on: copy the newest copy there
     /// (a chat moved to another account keeps its context). Never blocks the launch.
-    private func handOff(_ conversation: String, cwd: String, to target: Profile) -> String {
-        let profiles = (try? ProfileStore(env: env).all()) ?? [Profile.builtInDefault()]
+    private func handOff(_ conversation: String, cwd: String, to target: Profile, among profiles: [Profile]) -> String {
         do {
             switch try ConversationStore(env: env).ensure(id: conversation, cwd: cwd, target: target, among: profiles) {
             case .current: return ""
-            case .copied(let from): return "+handoff:\(from)"
+            case .copied(let from, let keptBackup): return "+handoff:\(from)" + (keptBackup ? "+backup" : "")
             }
         } catch {
+            // Claude still starts; say why the earlier history may be missing.
+            FileHandleWarning.write(
+                "switchboard: could not bring this conversation's history to '\(target.id)': \(error.localizedDescription)")
             return "+handoff-failed"
         }
+    }
+}
+
+/// Launcher warnings go to stderr, which the editor shows in its Claude output log.
+enum FileHandleWarning {
+    static func write(_ text: String) {
+        FileHandle.standardError.write(Data((text + "\n").utf8))
     }
 }

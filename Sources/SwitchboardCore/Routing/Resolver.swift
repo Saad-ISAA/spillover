@@ -33,7 +33,9 @@ public struct Resolver {
         self.profileStore = ProfileStore(env: env)
     }
 
-    public func resolve(cwd: String) -> Resolution {
+    /// `preferring`: for Auto folders, the account that already holds the conversation being
+    /// resumed (kept while it has room).
+    public func resolve(cwd: String, preferring: String? = nil) -> Resolution {
         let routes: [Route]
         switch routeStore.load() {
         case .missing:
@@ -67,7 +69,7 @@ public struct Resolver {
         let profile: Profile
         do {
             if route.profileId == Profile.autoID {
-                switch chooseAuto() {
+                switch chooseAuto(preferring: preferring) {
                 case .success(let p): profile = p
                 case .failure(let refusal): return .refused(refusal)
                 }
@@ -102,7 +104,7 @@ public struct Resolver {
     }
 
     /// Auto folders: the policy picks among the registered accounts using their latest limits.
-    private func chooseAuto() -> Result<Profile, Refusal> {
+    private func chooseAuto(preferring: String?) -> Result<Profile, Refusal> {
         let policy: AutoPolicy
         switch AutoPolicyStore(env: env).load() {
         case .loaded(let p): policy = p
@@ -118,8 +120,8 @@ public struct Resolver {
         let store = UsageStore(env: env)
         var snapshots: [String: UsageSnapshot] = [:]
         for p in profiles { snapshots[p.id] = store.load(profileId: p.id) }
-        guard let chosen = policy.choose(profiles: profiles, snapshots: snapshots) else {
-            return .failure(Refusal(code: .noAccounts, message: "No accounts to choose from."))
+        guard let chosen = policy.choose(profiles: profiles, snapshots: snapshots, preferring: preferring) else {
+            return .failure(Refusal(code: .noAccounts, message: "No usable account for Auto (none logged in?). Run `switchboard doctor`."))
         }
         return .success(chosen)
     }

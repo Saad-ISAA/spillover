@@ -66,7 +66,58 @@ final class ConversationTests: XCTestCase {
         XCTAssertEqual(ConversationActivity.state(tail: Data(done.utf8), quietFor: 10), .idle)
         XCTAssertEqual(ConversationActivity.state(tail: Data(done.utf8), quietFor: 1), .busy)
         XCTAssertEqual(ConversationActivity.state(tail: Data(tool.utf8), quietFor: 30), .busy)
-        XCTAssertEqual(ConversationActivity.state(tail: Data(user.utf8), quietFor: 300), .stalled)
+        XCTAssertEqual(ConversationActivity.state(tail: Data(user.utf8), quietFor: 900), .busy)
+        let interrupted = #"{"type":"assistant","message":{"stop_reason":null,"content":[{"type":"text"}]}}"#
+        XCTAssertEqual(ConversationActivity.state(tail: Data(interrupted.utf8), quietFor: 900), .stalled)
+        XCTAssertEqual(ConversationActivity.state(tail: Data(interrupted.utf8), quietFor: 60), .busy)
+        let pendingTool = #"{"type":"assistant","message":{"stop_reason":null,"content":[{"type":"tool_use"}]}}"#
+        XCTAssertEqual(ConversationActivity.state(tail: Data(pendingTool.utf8), quietFor: 3600), .busy)
+        XCTAssertNil(ConversationActivity.state(tail: Data(#"{"type":"ai-title"}"#.utf8), quietFor: 10))
+    }
+
+    func testDivergedCopyIsKeptAndPartialLineDropped() throws {
+        let box = try Sandbox()
+        let store = ProfileStore(env: box.env)
+        _ = try store.create(displayName: "work")
+        let personal = try store.create(displayName: "personal")
+        let cwd = "/Users/example/app"
+        let theirs = try transcript(box, ".switchboard/profiles/personal", cwd: cwd, text: "{\"p\":1}\n{\"p\":2}\n")
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -600)], ofItemAtPath: theirs.path)
+        try transcript(box, ".switchboard/profiles/work", cwd: cwd, text: "{\"w\":1}\n{\"w\":2, \"partial")
+        let result = try ConversationStore(env: box.env).ensure(id: id, cwd: cwd, target: personal, among: try store.all())
+        XCTAssertEqual(result, .copied(fromProfile: "work", keptBackup: true))
+        XCTAssertEqual(box.read(theirs), "{\"w\":1}\n")
+        let backups = try FileManager.default.contentsOfDirectory(atPath: theirs.deletingLastPathComponent().path)
+            .filter { $0.hasPrefix("\(id).jsonl.before-move-") }
+        XCTAssertEqual(backups.count, 1)
+    }
+
+    func testContinuationReplacesWithoutBackup() throws {
+        let box = try Sandbox()
+        let store = ProfileStore(env: box.env)
+        _ = try store.create(displayName: "work")
+        let personal = try store.create(displayName: "personal")
+        let cwd = "/Users/example/app"
+        let theirs = try transcript(box, ".switchboard/profiles/personal", cwd: cwd, text: "{\"a\":1}\n")
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -600)], ofItemAtPath: theirs.path)
+        try transcript(box, ".switchboard/profiles/work", cwd: cwd, text: "{\"a\":1}\n{\"a\":2}\n")
+        XCTAssertEqual(
+            try ConversationStore(env: box.env).ensure(id: id, cwd: cwd, target: personal, among: try store.all()),
+            .copied(fromProfile: "work", keptBackup: false))
+    }
+
+    func testRefusesToWriteThroughALink() throws {
+        let box = try Sandbox()
+        let store = ProfileStore(env: box.env)
+        _ = try store.create(displayName: "work")
+        let personal = try store.create(displayName: "personal")
+        let cwd = "/Users/example/app"
+        try transcript(box, ".switchboard/profiles/work", cwd: cwd, text: "x\n")
+        let outside = try box.write("outside.txt", "keep")
+        let dir = try box.mkdir(".switchboard/profiles/personal/projects/\(ConversationStore.projectKey(cwd: cwd))")
+        try FileManager.default.createSymbolicLink(at: dir.appendingPathComponent("\(id).jsonl"), withDestinationURL: outside)
+        XCTAssertThrowsError(try ConversationStore(env: box.env).ensure(id: id, cwd: cwd, target: personal, among: try store.all()))
+        XCTAssertEqual(box.read(outside), "keep")
     }
 
     func testEditorHostingAndSessionURL() {
@@ -96,10 +147,11 @@ final class AutoPolicyTests: XCTestCase {
         ])
     }
 
-    func testChoosesFirstAccountWithRoomInOrder() {
-        let a = Profile(id: "a", displayName: "A", configDir: "/a")
-        let b = Profile(id: "b", displayName: "B", configDir: "/b")
-        let c = Profile(id: "c", displayName: "C", configDir: "/c")
+    func testChoosesFirstAccountWithRoomInOrder() throws {
+        let box = try Sandbox()
+        let a = Profile(id: "a", displayName: "A", configDir: try box.mkdir("a").path)
+        let b = Profile(id: "b", displayName: "B", configDir: try box.mkdir("b").path)
+        let c = Profile(id: "c", displayName: "C", configDir: try box.mkdir("c").path)
         let policy = AutoPolicy(order: ["b", "a", "c"])
         let snaps = ["b": snapshot("b", five: 92), "a": snapshot("a", five: 40)]
         XCTAssertEqual(policy.choose(profiles: [a, b, c], snapshots: snaps, now: now)?.id, "a")
@@ -108,6 +160,29 @@ final class AutoPolicyTests: XCTestCase {
         // Nobody has room: the least used one.
         let full = ["a": snapshot("a", five: 99), "b": snapshot("b", five: 93), "c": snapshot("c", five: 97)]
         XCTAssertEqual(policy.choose(profiles: [a, b, c], snapshots: full, now: now)?.id, "b")
+    }
+
+    func testSkipsUnavailableAndMissingAccountsAndPrefersHolder() throws {
+        let box = try Sandbox()
+        let a = Profile(id: "a", displayName: "A", configDir: try box.mkdir("a").path)
+        let b = Profile(id: "b", displayName: "B", configDir: try box.mkdir("b").path)
+        let gone = Profile(id: "gone", displayName: "Gone", configDir: box.home.path + "/missing")
+        let policy = AutoPolicy(order: ["gone", "a", "b"], unavailable: ["a"])
+        XCTAssertEqual(policy.choose(profiles: [a, b, gone], snapshots: [:], now: now)?.id, "b")
+        XCTAssertNil(AutoPolicy(unavailable: ["a", "b"]).choose(profiles: [a, b], snapshots: [:], now: now))
+        // The account already holding a resumed chat keeps it while it has room.
+        XCTAssertEqual(AutoPolicy(order: ["a", "b"]).choose(profiles: [a, b], snapshots: [:], now: now, preferring: "b")?.id, "b")
+        let full = ["b": snapshot("b", five: 97)]
+        XCTAssertEqual(AutoPolicy(order: ["a", "b"]).choose(profiles: [a, b], snapshots: full, now: now, preferring: "b")?.id, "a")
+    }
+
+    func testOlderAutoFilesStillLoad() throws {
+        let box = try Sandbox()
+        try SafeFS.ensureDir(box.env.paths.root)
+        try SafeFS.writeAtomic(Data(#"{"version":1,"order":["x"],"threshold":85,"runOutMinutes":30,"moveOpenChats":false}"#.utf8), to: box.env.paths.autoPolicyFile)
+        guard case .loaded(let p) = AutoPolicyStore(env: box.env).load() else { return XCTFail("expected loaded") }
+        XCTAssertEqual(p.threshold, 85)
+        XCTAssertEqual(p.unavailable, [])
     }
 
     func testForecastRunOutCountsAsOutOfRoom() {
