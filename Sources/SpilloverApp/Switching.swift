@@ -252,7 +252,9 @@ extension AppModel {
         let name = Fmt.folderName(folder)
         switch phase {
         case .done:
-            show(.success, "\(name) chat moved to \(target.displayName) with its history. Its next message runs on \(target.displayName).")
+            // The extension asks which account it is on once per window, so its Account panel
+            // keeps the old email until the window reloads; the chat itself is already moved.
+            show(.success, "\(name) chat moved to \(target.displayName) with its history. Its next message runs on \(target.displayName). Claude's Account panel shows the new email after you reload the window.")
         case .closed:
             show(.info, "The \(name) chat was closed. It continues on \(target.displayName), with its history, when you reopen it.")
         case .failed(let why):
