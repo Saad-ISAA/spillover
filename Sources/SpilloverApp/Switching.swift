@@ -222,6 +222,12 @@ extension AppModel {
                 for _ in 0..<25 where SessionControl.isRunning(session.pid) {
                     try? await Task.sleep(nanoseconds: 200_000_000)
                 }
+                if SessionControl.isRunning(session.pid) {
+                    try? SessionControl.end(session, force: true)
+                    for _ in 0..<25 where SessionControl.isRunning(session.pid) {
+                        try? await Task.sleep(nanoseconds: 200_000_000)
+                    }
+                }
                 await MainActor.run {
                     // Bring the chat's window forward, then ask the extension to reopen the chat.
                     try? self.service.open(folder: cwd, in: editor)
@@ -229,7 +235,7 @@ extension AppModel {
                 try? await Task.sleep(nanoseconds: 1_500_000_000)
                 await MainActor.run { _ = NSWorkspace.shared.open(reopen) }
 
-                // Report what really happened: the chat back on the target account, or not.
+                // Report a reopen on the wrong account; anything else is a finished move.
                 let outcome = await Self.confirmReopened(id: id, on: target, env: env)
                 await MainActor.run { self.finishMove(id, outcome, target: target, folder: cwd) }
             } catch {
@@ -246,7 +252,7 @@ extension AppModel {
         let name = Fmt.folderName(folder)
         switch phase {
         case .done:
-            show(.success, "\(name) chat moved to \(target.displayName) with its history.")
+            show(.success, "\(name) chat moved to \(target.displayName) with its history. Its next message runs on \(target.displayName).")
         case .closed:
             show(.info, "The \(name) chat was closed. It continues on \(target.displayName), with its history, when you reopen it.")
         case .failed(let why):
@@ -265,7 +271,9 @@ extension AppModel {
         }
     }
 
-    /// Looks for the conversation running again, for up to 20 seconds.
+    /// The extension shows a reopened conversation at once but starts its process only when the
+    /// next message is sent, through the launcher, on the folder's account. So no process is the
+    /// usual outcome; a process that does start within 20 seconds must be on the target account.
     nonisolated private static func confirmReopened(id: String, on target: Profile, env: SBEnvironment) async -> ChatMove.Phase {
         let profiles = (try? ProfileStore(env: env).all()) ?? []
         for _ in 0..<20 {
@@ -275,7 +283,7 @@ extension AppModel {
             if actual == target.id { return .done }
             return .failed("it reopened on \(actual ?? "an unknown account") instead. Is the editor connected under Setup?")
         }
-        return .closed
+        return .done
     }
 
     private func isInside(_ cwd: String?, folder: String) -> Bool {

@@ -17,13 +17,15 @@ public enum SessionControl {
         }
     }
 
-    /// Ends `session` with SIGTERM after checking that its pid still belongs to the same chat:
-    /// same executable, same folder, same conversation, same user.
-    public static func end(_ session: RunningSession) throws {
+    /// Ends `session` after checking that its pid still belongs to the same chat: same executable,
+    /// same folder, same conversation, same user. It is sent SIGINT, which a chat between turns
+    /// handles as a clean exit; the editor then shows no error. `force` sends SIGTERM instead, for a
+    /// chat that did not exit (the editor reports that exit as an error until the chat reopens).
+    public static func end(_ session: RunningSession, force: Bool = false) throws {
         guard let current = SessionScanner.session(pid: session.pid), isSameChat(session, current) else {
             throw EndError.notTheSameSession
         }
-        if kill(session.pid, SIGTERM) != 0 { throw EndError.signalFailed(errno) }
+        if kill(session.pid, force ? SIGTERM : SIGINT) != 0 { throw EndError.signalFailed(errno) }
     }
 
     /// True while a process with this pid exists.

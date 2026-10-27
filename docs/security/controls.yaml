@@ -156,7 +156,7 @@ controls:
     title: Only one module ends other processes, and only the chat it was pointed at
     status: enforced
     owner: Sources/SpilloverCore/Sessions/SessionControl.swift
-    notes: Re-reads the pid's executable, folder, conversation id and start time before SIGTERM, so a reused pid is never signalled. Chats are ended only between turns.
+    notes: Re-reads the pid's executable, folder, conversation id and start time before each signal (SIGINT, then SIGTERM only if the chat did not exit), so a reused pid is never signalled. Chats are ended only between turns.
     tests:
       - ArchitectureTests.testOnlySessionControlSignalsProcesses
       - ConversationTests.testEndRefusesAReusedPid

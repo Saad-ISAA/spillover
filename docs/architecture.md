@@ -113,10 +113,13 @@ in each account's own config folder. A move therefore:
    target account (`ConversationStore.ensure`, newest copy wins, byte for byte);
 2. waits until the chat is between turns (`ConversationActivity`: the last conversational record is
    a finished assistant reply and the file is quiet; automatic moves accept nothing less);
-3. ends that one process (`SessionControl.end`, which re-checks the pid is still the same chat);
-4. focuses the chat's window and opens the reopen link; the extension starts the chat again through
-   the launcher, which routes it to the folder's (new) account and copies the transcript again if
-   it changed.
+3. ends that one process (`SessionControl.end`, which re-checks the pid is still the same chat).
+   It sends SIGINT, which a chat between turns treats as a clean exit, so the editor shows no
+   error; SIGTERM follows only if the process is still running five seconds later;
+4. focuses the chat's window and opens the reopen link. The extension shows the conversation at
+   once and starts its process when the next message is sent, through the launcher, which routes
+   it to the folder's (new) account and copies the transcript again if it changed (the ended
+   process appends a final bookkeeping record on exit).
 
 The launcher does step 1 on every resumed launch, so reloading a window after reassigning its
 folder also moves its chats with their history. No login data is read, copied or changed.
