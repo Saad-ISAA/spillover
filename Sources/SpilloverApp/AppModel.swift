@@ -73,6 +73,7 @@ final class AppModel: ObservableObject {
     init(env: SBEnvironment = .live()) {
         self.env = env
         self.service = AppService(env: env)
+        Fmt.home = env.home.path
         Self.shared = self
         refreshInstalledHelpersIfOutdated()
         refreshLocal()
@@ -231,10 +232,10 @@ final class AppModel: ObservableObject {
         let env = self.env
         Task.detached(priority: .utility) {
             let scanner = SessionScanner(env: env)
-            let assessed = scanner.assess(scanner.scan())
+            let assessed = scanner.assess(DemoSessions.load(env) ?? scanner.scan())
             await MainActor.run {
                 self.sessions = assessed
-                self.autoMoveChatsIfNeeded()
+                if !DemoSessions.isActive(env) { self.autoMoveChatsIfNeeded() }
             }
         }
     }
@@ -277,7 +278,7 @@ final class AppModel: ObservableObject {
     /// Fetches every account's limits the way /usage does, one account at a time, in the
     /// background. No message is sent and no login data passes through Spillover.
     func refreshLimits() {
-        guard checkingLimits.isEmpty else { return }
+        guard checkingLimits.isEmpty, !DemoSessions.isActive(env) else { return }
         let targets = profiles.filter { if case .loggedOut = statuses[$0.id] { return false } else { return true } }
         guard !targets.isEmpty else { return }
         limitsCheckedAt = Date()

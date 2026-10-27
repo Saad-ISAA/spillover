@@ -141,7 +141,7 @@ extension AppModel {
         let env = self.env
         Task.detached(priority: .userInitiated) {
             let scanner = SessionScanner(env: env)
-            let assessed = scanner.assess(scanner.scan())
+            let assessed = scanner.assess(DemoSessions.load(env) ?? scanner.scan())
             await MainActor.run {
                 self.sessions = assessed
                 for a in assessed where self.isInside(a.session.cwd, folder: folder) {
@@ -152,6 +152,7 @@ extension AppModel {
     }
 
     private func startMove(_ a: SessionAssessment, automatic: Bool) {
+        guard !DemoSessions.isActive(env) else { return }
         guard case .stale(let expectedID) = a.state, let target = profile(id: expectedID) else { return }
         guard let cwd = a.session.cwd, let editor = a.session.editor else {
             if !automatic {

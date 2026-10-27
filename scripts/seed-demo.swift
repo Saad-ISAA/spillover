@@ -166,5 +166,19 @@ for a in accounts {
     write(lines.joined(separator: "\n") + "\n", to: configDir.appendingPathComponent("projects/demo/session.jsonl"))
 }
 
+// Made-up chats for the Sessions screen (read through SPILLOVER_DEMO_SESSIONS, never the real
+// process table). billing-service was reassigned while its chat ran, so it shows "Move to".
+write(
+    """
+    [
+     {"pid": 90101, "folder": "Code/api-server", "account": "work", "editor": true, "minutesAgo": 42, "conversation": "0b5e9f1a-7c2d-4e8b-9a61-3f2d4c5b6a71"},
+     {"pid": 90102, "folder": "Code/billing-service", "account": "personal", "editor": true, "minutesAgo": 95, "conversation": "1c6fa02b-8d3e-4f9c-8b72-4e3e5d6c7b82"},
+     {"pid": 90103, "folder": "Code/client-portal", "account": "client", "editor": true, "minutesAgo": 18, "conversation": "2d70b13c-9e4f-4a0d-9c83-5f4f6e7d8c93"},
+     {"pid": 90104, "folder": "Code/infra", "account": "personal", "editor": true, "minutesAgo": 7, "conversation": "3e81c24d-af50-4b1e-8d94-60507f8e9da4"},
+     {"pid": 90105, "folder": "Code/blog", "account": "personal", "editor": false, "minutesAgo": 260, "conversation": null},
+     {"pid": 90106, "folder": "Code/notes", "account": "default", "editor": true, "minutesAgo": 133, "conversation": "4f92d35e-b061-4c2f-9ea5-71618091aeb5"}
+    ]
+    """, to: home.appendingPathComponent("demo-sessions.json"))
+
 print("Seeded \(home.path)")
 print("Run the app against it: SPILLOVER_REAL_CLAUDE=\(home.path)/bin/claude scripts/demo-screenshot.sh \(home.path) popover out.png")

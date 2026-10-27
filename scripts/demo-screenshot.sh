@@ -15,6 +15,7 @@ pkill -f "$APP" 2>/dev/null || true
 REAL_CLAUDE=""
 [ -x "$DEMO_HOME/bin/claude" ] && REAL_CLAUDE="$DEMO_HOME/bin/claude"
 HOME="$DEMO_HOME" SPILLOVER_REAL_CLAUDE="$REAL_CLAUDE" SPILLOVER_DEMO_SHOW="$SHOW" \
+    SPILLOVER_DEMO_SESSIONS="$DEMO_HOME/demo-sessions.json" \
     SPILLOVER_DEMO_APPEARANCE="$APPEARANCE" "$APP" >/dev/null 2>&1 &
 PID=$!
 sleep 6

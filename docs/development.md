@@ -58,12 +58,16 @@ swift scripts/seed-demo.swift "$DEMO"
 scripts/demo-screenshot.sh "$DEMO" popover /tmp/popover.png dark   # or main:overview, main:usage, ...
 ```
 
+The seed also writes made-up running chats (`demo-sessions.json`); with
+`SPILLOVER_DEMO_SESSIONS` set the app shows those instead of the real process table, so
+screenshots never include this machine's own folders, and moves and limit checks are off.
+
 When window capture is unavailable (a locked screen, a headless session), render the popover, the
 menu bar glyph states and the mark to PNG files instead; native menus and pickers show as
 placeholders in this mode:
 
 ```sh
-HOME="$DEMO" SPILLOVER_DEMO_RENDER=/tmp/spillover-render .build/debug/SpilloverApp
+HOME="$DEMO" SPILLOVER_DEMO_SESSIONS="$DEMO/demo-sessions.json" SPILLOVER_DEMO_RENDER=/tmp/spillover-render .build/debug/SpilloverApp
 ```
 
 ## Conventions

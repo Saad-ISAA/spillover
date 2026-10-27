@@ -1,4 +1,5 @@
 import AppKit
+import SpilloverCore
 import SwiftUI
 
 /// Documentation only: `SPILLOVER_DEMO_RENDER=<folder>` renders the popover (light and dark) and
@@ -38,6 +39,40 @@ enum DemoRender {
                 let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:])
             else { return }
             try? png.write(to: url)
+        }
+    }
+}
+
+/// Documentation only: `SPILLOVER_DEMO_SESSIONS=<file>` lists made-up chats instead of the real
+/// process table, so screenshots never show the machine's own folders. Moves are off in this mode.
+enum DemoSessions {
+    private struct Entry: Decodable {
+        let pid: Int32
+        /// Relative to the demo home.
+        let folder: String
+        let account: String
+        let editor: Bool
+        let minutesAgo: Double
+        let conversation: String?
+    }
+
+    static func isActive(_ env: SBEnvironment) -> Bool { env.processEnv["SPILLOVER_DEMO_SESSIONS"] != nil }
+
+    static func load(_ env: SBEnvironment) -> [RunningSession]? {
+        guard let path = env.processEnv["SPILLOVER_DEMO_SESSIONS"] else { return nil }
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+            let entries = try? JSONDecoder().decode([Entry].self, from: data)
+        else { return [] }
+        let profiles = (try? ProfileStore(env: env).all()) ?? []
+        let editorBinary = env.home.appendingPathComponent(
+            ".vscode/extensions/anthropic.claude-code-2.1.0-darwin-arm64/resources/native-binary/claude").path
+        let terminalBinary = env.home.appendingPathComponent(".local/share/claude/versions/2.1.0").path
+        return entries.map { e in
+            RunningSession(
+                pid: e.pid, executable: e.editor ? editorBinary : terminalBinary,
+                cwd: env.home.appendingPathComponent(e.folder).path,
+                configDir: profiles.first { $0.id == e.account }?.configDir, spilloverProfile: nil,
+                startedAt: Date().addingTimeInterval(-e.minutesAgo * 60), conversationId: e.conversation)
         }
     }
 }

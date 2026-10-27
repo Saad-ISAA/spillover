@@ -133,8 +133,11 @@ enum Fmt {
         return items.dropLast().joined(separator: ", ") + " and " + items.last!
     }
 
+    /// The home folder paths are shortened against (the app's environment, not the login's).
+    static var home = NSHomeDirectory()
+
     static func shortFolder(_ path: String) -> String {
-        let home = NSHomeDirectory()
+        let home = Self.home
         if path == home { return "~" }
         if path.hasPrefix(home + "/") { return "~" + path.dropFirst(home.count) }
         return path
