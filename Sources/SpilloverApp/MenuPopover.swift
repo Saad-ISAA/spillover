@@ -304,7 +304,11 @@ private struct AccountTile: View {
                     VStack(alignment: .leading, spacing: 2) {
                         figure("Session", five)
                         figure("Week", seven)
-                        Text(footnote).font(.system(size: 10)).foregroundStyle(Ink.faint).lineLimit(1)
+                        if let tag = model.outlookTag(for: profile) {
+                            Text(tag.text).font(.system(size: 10, weight: .semibold)).foregroundStyle(Ink.tone(tag.tone)).lineLimit(1)
+                        } else {
+                            Text(footnote).font(.system(size: 10)).foregroundStyle(Ink.faint).lineLimit(1)
+                        }
                     }
                     Spacer(minLength: 0)
                 }

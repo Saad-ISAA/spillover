@@ -7,8 +7,13 @@ struct OverviewView: View {
     @State private var chartKind: UsageWindow.Kind = .sevenDay
 
     var body: some View {
-        let finding = model.finding
-        Page(title: "Overview", subtitle: subtitle(finding), subtitleTone: finding?.tone ?? .neutral) {
+        let current = model.finding
+        let finding = current?.key == model.dismissedFinding ? nil : current
+        Page(
+            title: "Overview", subtitle: subtitle(finding.map { ($0.profile, $0.text, $0.tone) }),
+            subtitleTone: finding?.tone ?? .neutral,
+            dismissSubtitle: finding.map { f in { withAnimation(.easeOut(duration: 0.2)) { model.dismissedFinding = f.key } } }
+        ) {
             EmptyView()
         } content: {
             // Column count follows the number of accounts: all in one row when they fit, else
@@ -47,7 +52,8 @@ struct OverviewView: View {
     private func subtitle(_ finding: (profile: Profile, text: String, tone: Tone)?) -> String {
         if let finding { return finding.text }
         if let last = model.lastCapture {
-            return "Every account has room at its current pace. Limits last reported \(Fmt.relative(last, now: model.now))."
+            let room = model.finding == nil ? "Every account has room at its current pace. " : ""
+            return "\(room)Limits last reported \(Fmt.relative(last, now: model.now))."
         }
         return "Each account's limits are checked every few minutes, the way /usage does."
     }
@@ -150,7 +156,7 @@ struct OverviewView: View {
             }
             let stale = model.staleSessions.count
             if stale > 0 {
-                Notice(icon: "arrow.triangle.2.circlepath", tone: .warning, text: "\(Fmt.plural(stale, "session")) on an old account until restarted.")
+                Notice(icon: "arrow.triangle.2.circlepath", tone: .warning, text: "\(Fmt.plural(stale, "chat")) on an old account. Move it under Sessions.")
             } else if !model.sessions.isEmpty {
                 Text("All on the account their folder is assigned to.").font(TypeScale.meta).foregroundStyle(Ink.muted)
             }
@@ -175,7 +181,12 @@ private struct AccountFace: View {
                     Monogram(profile: profile, size: 22)
                     Text(profile.displayName).font(TypeScale.bodyStrong).foregroundStyle(Ink.text).lineLimit(1)
                     Spacer(minLength: 4)
-                    if let plan = model.statuses[profile.id]?.auth?.planLabel { Pill(text: plan) }
+                    if let tag = model.outlookTag(for: profile) {
+                        Pill(text: tag.text, tone: tag.tone)
+                            .help(model.urgentForecast(for: profile).map { Outlook.sentence($0.0, now: model.now).text } ?? "")
+                    } else if let plan = model.statuses[profile.id]?.auth?.planLabel {
+                        Pill(text: plan)
+                    }
                 }
                 HStack(alignment: .top, spacing: 0) {
                     gauge(five, kind: .fiveHour, caption: "session").frame(maxWidth: .infinity)

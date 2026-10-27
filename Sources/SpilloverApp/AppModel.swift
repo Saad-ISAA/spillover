@@ -146,22 +146,45 @@ final class AppModel: ObservableObject {
     }
 
     /// The most pressing thing in the data right now, as one sentence (nil when all is calm).
-    var finding: (profile: Profile, text: String, tone: Tone)? {
-        var best: (Profile, String, Tone, Double)?
+    /// The most urgent finding across accounts: a limit used up, or one heading there early.
+    /// `key` identifies it until that window resets, so a dismissal holds only for this finding.
+    var finding: (profile: Profile, text: String, tone: Tone, key: String)? {
+        var best: (Profile, PaceForecast, Double)?
         for p in profiles {
-            for kind in [UsageWindow.Kind.fiveHour, .sevenDay] {
-                guard let f = forecast(kind, for: p) else { continue }
-                let (text, tone) = Outlook.sentence(f, now: now)
-                let urgency: Double
-                switch f.outlook {
-                case .full: urgency = 3
-                case .runsOut(_, let early): urgency = 2 + min(early, 86400 * 7) / (86400 * 7)
-                default: continue
-                }
-                if urgency > (best?.3 ?? 0) { best = (p, "\(p.displayName): " + text.prefix(1).lowercased() + text.dropFirst(), tone, urgency) }
-            }
+            if let (f, urgency) = urgentForecast(for: p), urgency > (best?.2 ?? 0) { best = (p, f, urgency) }
         }
-        return best.map { ($0.0, $0.1, $0.2) }
+        guard let (p, f, _) = best else { return nil }
+        let (text, tone) = Outlook.sentence(f, now: now)
+        return (
+            p, "\(p.displayName): " + text.prefix(1).lowercased() + text.dropFirst(), tone,
+            "\(p.id)|\(f.kind.rawValue)|\(Int(f.resetsAt.timeIntervalSince1970))"
+        )
+    }
+
+    /// An account's most urgent window, if any limit is used up or heading there before it resets.
+    func urgentForecast(for p: Profile) -> (PaceForecast, Double)? {
+        var best: (PaceForecast, Double)?
+        for kind in [UsageWindow.Kind.fiveHour, .sevenDay] {
+            guard let f = forecast(kind, for: p) else { continue }
+            let urgency: Double
+            switch f.outlook {
+            case .full: urgency = 3
+            case .runsOut(_, let early): urgency = 2 + min(early, 86400 * 7) / (86400 * 7)
+            default: continue
+            }
+            if urgency > (best?.1 ?? 0) { best = (f, urgency) }
+        }
+        return best
+    }
+
+    /// The account's finding in two or three words, for its card.
+    func outlookTag(for p: Profile) -> (text: String, tone: Tone)? {
+        urgentForecast(for: p).flatMap { Outlook.tag($0.0, now: now) }
+    }
+
+    /// The Overview warning the user closed (until that limit resets or another one appears).
+    @Published var dismissedFinding: String? = UserDefaults.standard.string(forKey: "dismissedFinding") {
+        didSet { UserDefaults.standard.set(dismissedFinding, forKey: "dismissedFinding") }
     }
 
     /// When the freshest limit reading was taken.

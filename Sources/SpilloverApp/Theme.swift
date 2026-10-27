@@ -212,6 +212,22 @@ enum Fmt {
 
 /// Plain-language reading of a forecast, with the tone it should carry.
 enum Outlook {
+    /// The finding in two or three words, for an account's card: only when a limit is used up or
+    /// heading there before it resets.
+    static func tag(_ f: PaceForecast, now: Date) -> (text: String, tone: Tone)? {
+        switch f.outlook {
+        case .full:
+            return ("Limit reached", .negative)
+        case .runsOut(let at, _):
+            let tone = sentence(f, now: now).tone
+            let f2 = DateFormatter()
+            f2.setLocalizedDateFormatFromTemplate(Calendar.current.isDate(at, inSameDayAs: now) ? "j" : "EEE")
+            return ("Runs out \(f2.string(from: at))", tone)
+        default:
+            return nil
+        }
+    }
+
     static func sentence(_ f: PaceForecast, now: Date) -> (text: String, tone: Tone) {
         let window = f.kind == .fiveHour ? "session limit" : "weekly limit"
         switch f.outlook {

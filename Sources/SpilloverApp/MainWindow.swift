@@ -162,6 +162,8 @@ struct Page<Content: View, Actions: View>: View {
     let title: String
     let subtitle: String
     var subtitleTone: Tone = .neutral
+    /// When set, the subtitle can be closed (for warnings).
+    var dismissSubtitle: (() -> Void)?
     @ViewBuilder var actions: Actions
     @ViewBuilder var content: Content
     @EnvironmentObject var model: AppModel
@@ -173,10 +175,21 @@ struct Page<Content: View, Actions: View>: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(title).font(TypeScale.title).foregroundStyle(Ink.text)
                             .accessibilityAddTraits(.isHeader)
-                        Text(subtitle)
-                            .font(TypeScale.body)
-                            .foregroundStyle(subtitleTone == .neutral ? Ink.muted : Ink.tone(subtitleTone))
-                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(subtitle)
+                                .font(TypeScale.body)
+                                .foregroundStyle(subtitleTone == .neutral ? Ink.muted : Ink.tone(subtitleTone))
+                                .fixedSize(horizontal: false, vertical: true)
+                            if let dismissSubtitle {
+                                Button(action: dismissSubtitle) {
+                                    Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(Ink.faint)
+                                .help("Hide this until the limit resets")
+                                .accessibilityLabel("Dismiss")
+                            }
+                        }
                     }
                     Spacer(minLength: 12)
                     HStack(spacing: 8) { actions }
@@ -196,6 +209,8 @@ struct Page<Content: View, Actions: View>: View {
 
 extension Page where Actions == EmptyView {
     init(title: String, subtitle: String, subtitleTone: Tone = .neutral, @ViewBuilder content: () -> Content) {
-        self.init(title: title, subtitle: subtitle, subtitleTone: subtitleTone, actions: { EmptyView() }, content: content)
+        self.init(
+            title: title, subtitle: subtitle, subtitleTone: subtitleTone, dismissSubtitle: nil, actions: { EmptyView() },
+            content: content)
     }
 }
