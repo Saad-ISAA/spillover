@@ -62,6 +62,9 @@ final class AppModel: ObservableObject {
     var checkingStoppedChats = false
     /// When stopped chats were last checked (shows that resuming is alive).
     @Published var lastStoppedCheck: Date?
+    /// Whether macOS lets Spillover type into VS Code (re-checked on every refresh and whenever the
+    /// app comes to the front, since the permission is granted outside the app).
+    @Published var accessibilityAllowed = ChatSender.isAllowed
     @Published var autoPolicy = AutoPolicy()
     /// What each installed editor's Claude extension supports (checked after updates too).
     @Published var contracts: [Editor: ExtensionContract] = [:]
@@ -88,12 +91,16 @@ final class AppModel: ObservableObject {
         refreshAuth()
         refreshSessions()
         checkStoppedChats()
+        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.accessibilityAllowed = ChatSender.isAllowed }
+        }
         scanLocalUsage()
         refreshLimits()
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
                 self.now = Date()
+                self.accessibilityAllowed = ChatSender.isAllowed
                 self.refreshUsageSnapshots()
                 self.refreshSessions()
                 self.ticks += 1

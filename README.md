@@ -158,6 +158,7 @@ After connecting anything in the app, the CLI is at `~/.spillover/bin/spillover`
 - macOS only for now. Remote development (SSH, containers, WSL) runs Claude on the remote machine, outside Spillover's reach.
 - Relies on the Claude Code extension's `claudeCode.claudeProcessWrapper` setting. **Health** warns if an extension update changes it.
 - The Claude panel's *Account & Usage* view may show “Auth method: Not specified” for routed sessions; the account, plan and usage shown are correct.
+- Resuming chats types into VS Code through the Accessibility permission. Builds are not signed with a Developer ID yet, so after an update macOS may keep showing Spillover as allowed while ignoring it: remove it from **Privacy & Security → Accessibility** with **–** and allow it again.
 - Logins themselves are handled entirely by Claude Code. Spillover does not log you in or out by itself; it opens the official commands.
 
 ## Security

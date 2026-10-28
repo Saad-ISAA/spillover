@@ -53,7 +53,7 @@ struct ResumePanel: View {
     private var status: some View {
         if !model.autoPolicy.resumeChats {
             Pill(text: "Off")
-        } else if !ChatSender.isAllowed {
+        } else if !model.accessibilityAllowed {
             Pill(text: "Needs permission", tone: .warning)
         } else {
             Pill(text: "On", tone: .positive)
@@ -64,8 +64,8 @@ struct ResumePanel: View {
         var parts: [String] = []
         if !model.autoPolicy.resumeChats {
             parts.append("Turn on Resume chats automatically under Setup to continue chats stopped by a limit when their account has room.")
-        } else if !ChatSender.isAllowed {
-            parts.append("Allow Spillover under System Settings → Privacy & Security → Accessibility.")
+        } else if !model.accessibilityAllowed {
+            parts.append("Allow Spillover under System Settings → Privacy & Security → Accessibility. If it is already listed and on, remove it with – and allow it again (macOS ties the permission to each build).")
         } else if let checked = model.lastStoppedCheck {
             parts.append("Checked \(Fmt.relative(checked, now: model.now)); checks every minute.")
         }

@@ -271,9 +271,9 @@ private struct AutoSettings: View {
         Text("In every folder: a minute after a chat's usage limit resets (or, in an Auto folder, once another account has room), and right after Auto moves a chat with background work, Spillover types \"please resume all work\" into that chat in its VS Code window. The chat restarts its own subagents and background tasks. It only types into an idle chat with an empty message box, and waits until you have left the keyboard for a moment.")
             .font(TypeScale.meta).foregroundStyle(Ink.faint)
             .fixedSize(horizontal: false, vertical: true)
-        if model.autoPolicy.resumeChats && !ChatSender.isAllowed {
+        if model.autoPolicy.resumeChats && !model.accessibilityAllowed {
             HStack(spacing: 8) {
-                Text("Needs permission to type into VS Code: System Settings → Privacy & Security → Accessibility → Spillover.")
+                Text("Needs permission to type into VS Code: System Settings → Privacy & Security → Accessibility → Spillover. If Spillover is already listed and on, remove it with – and allow it again: macOS ties the permission to each build of the app.")
                     .font(TypeScale.meta).foregroundStyle(Ink.tone(.warning))
                     .fixedSize(horizontal: false, vertical: true)
                 Button("Allow…") { ChatSender.requestPermission() }.buttonStyle(QuietButtonStyle(tone: .warning))

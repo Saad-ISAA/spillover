@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.6 (unreleased)
+
+- The Accessibility permission for resuming chats is checked again every 30 seconds and whenever
+  Spillover comes to the front, so its warning clears without a restart, and it explains that
+  after an update macOS may need Spillover removed from the Accessibility list and allowed again.
+
 ## 0.1.5 (2026-10-29)
 
 - Resume chats automatically (Setup → Auto, off until you turn it on). Spillover types "please
