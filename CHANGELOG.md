@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.5 (unreleased)
+## 0.1.5 (2026-10-29)
 
 - Resume chats automatically (Setup → Auto, off until you turn it on). Spillover types "please
   resume all work" into a chat in its own VS Code panel, and the chat restarts its own subagents
