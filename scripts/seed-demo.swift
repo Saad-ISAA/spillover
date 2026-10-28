@@ -180,5 +180,32 @@ write(
     ]
     """, to: home.appendingPathComponent("demo-sessions.json"))
 
+// Chats stopped by a usage limit, for the Auto resume panel: one just stopped (waiting for room),
+// one whose account has had room since (resuming), and one already resumed.
+let fractional = ISO8601DateFormatter()
+fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+func stoppedChat(id: String, account: String, folder: String, title: String, stoppedAgo: TimeInterval) -> String {
+    let configDir = account == "default" ? home.appendingPathComponent(".claude") : home.appendingPathComponent(".spillover/profiles/\(account)")
+    let cwd = home.appendingPathComponent("Code/\(folder)").path
+    let at = fractional.string(from: now.addingTimeInterval(-stoppedAgo))
+    let ask = fractional.string(from: now.addingTimeInterval(-stoppedAgo - 300))
+    let lines = [
+        "{\"type\":\"user\",\"timestamp\":\"\(ask)\",\"cwd\":\"\(cwd)\",\"entrypoint\":\"claude-vscode\",\"message\":{\"content\":\"Carry on with the plan.\"}}",
+        "{\"type\":\"assistant\",\"timestamp\":\"\(at)\",\"cwd\":\"\(cwd)\",\"entrypoint\":\"claude-vscode\",\"error\":\"rate_limit\",\"isApiErrorMessage\":true,\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"You've hit your 5-hour limit\"}]}}",
+        "{\"type\":\"ai-title\",\"aiTitle\":\"\(title)\",\"sessionId\":\"\(id)\"}",
+    ]
+    let key = cwd.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ".", with: "-")
+    write(lines.joined(separator: "\n") + "\n", to: configDir.appendingPathComponent("projects/\(key)/\(id).jsonl"))
+    return at
+}
+_ = stoppedChat(id: "5a03e46f-c172-4d3a-8fb6-82729102bfc6", account: "work", folder: "api-server", title: "Checkout flow refactor", stoppedAgo: 60)
+_ = stoppedChat(id: "6b14f570-d283-4e4b-90c7-93830213c0d7", account: "client", folder: "client-portal", title: "Invoice export for Fabrikam", stoppedAgo: 2 * 3600)
+let resumedAt = stoppedChat(id: "7c25a681-e394-4f5c-81d8-a4941324d1e8", account: "personal", folder: "infra", title: "Terraform state cleanup", stoppedAgo: 5 * 3600)
+write(
+    """
+    {"7c25a681-e394-4f5c-81d8-a4941324d1e8":{"stoppedAt":"\(iso.string(from: fractional.date(from: resumedAt)!))",
+     "roomSince":"\(iso.string(from: now.addingTimeInterval(-4 * 3600 - 120)))","attemptedAt":"\(iso.string(from: now.addingTimeInterval(-4 * 3600)))","outcome":"resumed"}}
+    """, to: home.appendingPathComponent(".spillover/limit-resumes.json"))
+
 print("Seeded \(home.path)")
 print("Run the app against it: SPILLOVER_REAL_CLAUDE=\(home.path)/bin/claude scripts/demo-screenshot.sh \(home.path) popover out.png")

@@ -25,7 +25,7 @@ extension AppModel {
     /// Finds chats stopped by a limit, notes since when each one's account has room, and resumes
     /// the ones that are due. Runs on every refresh; the scan runs in the background.
     func checkStoppedChats() {
-        guard !checkingStoppedChats, !DemoSessions.isActive(env) else { return }
+        guard !checkingStoppedChats else { return }
         checkingStoppedChats = true
         let env = self.env
         let profiles = self.profiles
@@ -57,6 +57,7 @@ extension AppModel {
             let ready = due
             await MainActor.run {
                 self.stoppedChats = found
+                self.lastStoppedCheck = Date()
                 self.checkingStoppedChats = false
                 if self.autoPolicy.resumeChats { self.resumeStoppedChats(ready) }
             }
@@ -72,7 +73,8 @@ extension AppModel {
     // MARK: Resuming
 
     private func resumeStoppedChats(_ due: [LimitStop]) {
-        guard !due.isEmpty, ChatSender.isAllowed else { return }
+        // Demo homes are only looked at, never typed into.
+        guard !due.isEmpty, ChatSender.isAllowed, !DemoSessions.isActive(env) else { return }
         // Never type while the user is typing: due chats wait for the next quiet refresh.
         guard ChatSender.secondsSinceUserInput >= Self.resumeAfterIdleSeconds else { return }
         let log = LimitResumeLog(env: env)

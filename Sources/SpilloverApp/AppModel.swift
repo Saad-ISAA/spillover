@@ -60,6 +60,8 @@ final class AppModel: ObservableObject {
     /// Chats stopped by a usage limit, with what Spillover will do about each.
     @Published var stoppedChats: [StoppedChat] = []
     var checkingStoppedChats = false
+    /// When stopped chats were last checked (shows that resuming is alive).
+    @Published var lastStoppedCheck: Date?
     @Published var autoPolicy = AutoPolicy()
     /// What each installed editor's Claude extension supports (checked after updates too).
     @Published var contracts: [Editor: ExtensionContract] = [:]
@@ -85,6 +87,7 @@ final class AppModel: ObservableObject {
         refreshLocal()
         refreshAuth()
         refreshSessions()
+        checkStoppedChats()
         scanLocalUsage()
         refreshLimits()
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in

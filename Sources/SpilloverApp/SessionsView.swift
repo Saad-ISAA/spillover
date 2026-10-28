@@ -69,7 +69,7 @@ struct SessionsView: View {
                     Text("stopped \(Fmt.moment(chat.stop.stoppedAt, now: model.now))")
                         .font(TypeScale.meta.monospacedDigit()).foregroundStyle(Ink.muted)
                         .frame(width: 110, alignment: .trailing)
-                    stoppedState(chat).frame(width: 170, alignment: .trailing)
+                    ResumeStatePill(chat: chat).frame(width: 170, alignment: .trailing)
                 }
                 .padding(.vertical, 10)
                 Rule()
@@ -79,26 +79,6 @@ struct SessionsView: View {
                 : "Turn on Resume chats automatically under Setup to have Spillover continue these chats when their account has room again.")
                 .font(TypeScale.meta).foregroundStyle(Ink.faint).padding(.top, 8)
                 .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    @ViewBuilder
-    private func stoppedState(_ chat: StoppedChat) -> some View {
-        if let outcome = chat.entry.outcome {
-            if outcome == "resumed" {
-                Pill(text: "Resumed", tone: .positive)
-            } else {
-                Pill(text: "Not resumed", tone: .negative).help(outcome)
-            }
-        } else if chat.targetProfileId == nil {
-            Pill(text: "Folder refused", tone: .negative)
-        } else if LimitResumeLog.isMissed(chat.entry, now: model.now) {
-            Pill(text: "Not resumed")
-                .help("Its account has had room for more than \(Int(LimitStops.resumeWindow / 3600)) hours, so it was left as it is. Send it a message to continue.")
-        } else if let at = chat.expected {
-            Pill(text: at <= model.now ? "Resuming…" : "Resumes \(Fmt.moment(at, now: model.now))", tone: .data)
-        } else {
-            Pill(text: "Waiting for room")
         }
     }
 

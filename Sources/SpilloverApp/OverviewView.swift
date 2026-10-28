@@ -31,6 +31,8 @@ struct OverviewView: View {
                 }
                 .frame(width: 300)
             }
+
+            ResumePanel()
         }
     }
 

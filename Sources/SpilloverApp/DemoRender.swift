@@ -2,8 +2,9 @@ import AppKit
 import SpilloverCore
 import SwiftUI
 
-/// Documentation only: `SPILLOVER_DEMO_RENDER=<folder>` renders the popover (light and dark) and
-/// the menu bar glyph states to PNG files without showing a window, then quits. Lets screenshots
+/// Documentation only: `SPILLOVER_DEMO_RENDER=<folder>` renders the popover and the Overview's Auto
+/// resume panel (light and dark) and the menu bar glyph states to PNG files without showing a
+/// window, then quits. Lets screenshots
 /// be made where window capture is unavailable. AppKit-backed controls (menus, pickers) render as
 /// placeholders in this mode.
 @MainActor
@@ -24,6 +25,12 @@ enum DemoRender {
                     .renderingMode(.template).foregroundStyle(.black).frame(width: 18, height: 18)
                     .padding(4).background(Color.white)
                 write(glyph, to: out.appendingPathComponent("glyph-\(name).png"), appearance: .aqua, scale: 6)
+            }
+            for (name, scheme) in [("light", ColorScheme.light), ("dark", .dark)] {
+                let panel = ResumePanel().environmentObject(model).environment(\.colorScheme, scheme)
+                    .frame(width: 880).padding(20)
+                    .background(scheme == .dark ? Color(white: 0.09) : Color.white)
+                write(panel, to: out.appendingPathComponent("resume-panel-\(name).png"), appearance: scheme == .dark ? .darkAqua : .aqua)
             }
             write(BrandMark(size: 64).padding(8).background(Color.white), to: out.appendingPathComponent("brand-light.png"), appearance: .aqua)
             write(BrandMark(size: 64).padding(8).background(Color(white: 0.09)), to: out.appendingPathComponent("brand-dark.png"), appearance: .darkAqua)

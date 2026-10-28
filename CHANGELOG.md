@@ -9,7 +9,8 @@
     as soon as another account has room, with the chat's history copied there);
   - right after Auto moves a chat to another account, so Auto no longer has to wait for the
     chat's background work before moving it.
-  Sessions lists chats stopped by a limit with when each one resumes. Spillover only types into
+  The Overview's Auto resume panel shows whether resuming is on and working, and each stopped
+  chat with when it resumes (or what happened); Sessions and `spillover stopped` list them too. Spillover only types into
   an idle chat with an empty message box, after you have left the keyboard for a moment, and
   needs the Accessibility permission to do so.
 

@@ -63,7 +63,7 @@ The seed also writes made-up running chats (`demo-sessions.json`); with
 screenshots never include this machine's own folders, and moves and limit checks are off.
 
 When window capture is unavailable (a locked screen, a headless session), render the popover, the
-menu bar glyph states and the mark to PNG files instead; native menus and pickers show as
+Overview's Auto resume panel, the menu bar glyph states and the mark to PNG files instead; native menus and pickers show as
 placeholders in this mode:
 
 ```sh
