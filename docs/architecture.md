@@ -107,6 +107,7 @@ shims/claude          symlink to the launcher (PATH shim)
 logs/launch.log       one line per launch decision, no arguments
 backups/              editor settings before each edit
 usage/                captured limits and the statusline chain
+limit-resumes.json    chats stopped by a limit: room since, resumed or why not (one week)
 tmp/                  short-lived Terminal scripts for login
 ```
 
@@ -122,15 +123,13 @@ process has ended, the panel keeps the conversation and its next message starts 
 2. waits until the chat is between turns and has no background work (`ConversationActivity`: the
    last conversational record is a finished assistant reply, the file is quiet, and every
    background subagent or background command the process started has reported back with a task
-   notification; they run inside the chat's process and would end with it). Every move waits for
-   that background work. An automatic move stops waiting only when the account is about to stop
+   notification; they run inside the chat's process and would end with it). A manual move waits
+   for that background work. An automatic move does not wait when resuming chats is on (see
+   below: right after the switch the chat is told to resume its work in its own panel, and it
+   restarts its subagents and background commands itself), or when the account is about to stop
    working (`AutoPolicy.isNearlyOut`: 98% of a limit, or forecast to reach one within 10
-   minutes), when the limit would stop that work anyway; the user is then told the work stopped,
-   and the chat's next message continues on the new account. Nothing is resumed out of sight: the
-   extension cannot be asked to send a message into a chat (its `open?prompt=` link only fills
-   the input box), and a chat run from outside the editor would be a second process on the same
-   conversation as soon as the user types in its panel. A waiting automatic move is dropped when
-   the chat's account has room again;
+   minutes); otherwise it waits too. A waiting automatic move is dropped when the chat's account
+   has room again;
 3. ends that one process (`SessionControl.end`, which re-checks the pid is still the same chat).
    It sends SIGINT, which a chat between turns treats as a clean exit, so the editor shows no
    error; SIGTERM follows only if the process is still running five seconds later;
@@ -148,6 +147,42 @@ which account is picked next.
 
 The launcher does step 1 on every resumed launch, so reloading a window after reassigning its
 folder also moves its chats with their history. No login data is read, copied or changed.
+
+## Resuming chats
+
+With "Resume chats automatically" on (`AutoPolicy.resumeChats`, off by default), Spillover sends
+a chat "please resume all work" in its own VS Code panel in two cases:
+
+- after an automatic move that stopped the chat's background work ("The account switched.
+  Please resume all work.");
+- once a chat stopped on a usage limit can continue ("Your usage limit has reset. Please resume
+  all work.").
+
+`LimitStops` finds stopped chats: a main transcript of a chat in a VS Code panel (entrypoint
+`claude-vscode`; subagents keep their own transcripts, and agent runs in worktrees use other
+entrypoints), changed in the last eight days, whose newest copy across accounts ends on Claude's
+`rate_limit` message, ignoring system notes, titles and background task notices. The account the chat would run on next is resolved without recording an
+Auto choice (`Resolver.resolve(record: false)`): the account it is on for an assigned folder, or
+Auto's pick, which can be another account with room. `LimitStops.roomSince` dates the room from the
+account's reading history (the reset of the last reading after the stop that was at the limit, or
+the first reading after the stop), and `LimitResumeLog` (`limit-resumes.json`) keeps the earliest
+such time per stop. A chat is due `LimitStops.grace` (one minute) after its account has room, and
+only for `LimitStops.resumeWindow` (three hours) after that: a chat left stopped longer was left
+on purpose and is never typed into. Each stop is acted on once. Sessions and `spillover stopped`
+list the stopped chats with when each one resumes, or why it was not.
+
+Claude's extension takes no message from other apps (its `open?prompt=` link only fills the input
+box, and not at all for a chat already open) and ignores text placed into its input from outside,
+so `ChatSender` (app, Accessibility permission) types it: it turns on VS Code's accessibility
+tree (`AXManualAccessibility`), finds the window whose title ends with the folder's name, and in
+it the chat panel whose header shows the chat's title (a renamed title, else the generated one).
+It refuses unless that panel is idle (Send, not Stop) and its message box is empty (an empty box
+reports its placeholder), and waits until the user has not touched the keyboard or mouse for 15
+seconds. It then brings the window forward, focuses that box, checks the focus, selects all,
+types the message, checks it landed, presses Return, checks the box emptied, and puts the
+previous app back in front. A chat not open in its window is opened there by its id first.
+Afterwards the transcript is checked for the message; failures are reported, never retried.
+Nothing runs out of sight: the chat continues in its own panel and process, through the launcher.
 
 ## Editor and extension lifecycle
 

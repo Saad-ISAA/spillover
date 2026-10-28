@@ -25,6 +25,7 @@ let help = """
       spillover uninstall                     Undo every change to editors and shells
       spillover usage [--days N]              Limits and local token totals per profile
       spillover sessions                      Running Claude sessions and their accounts
+      spillover stopped                       Chats stopped by a usage limit, and their resume state
       spillover doctor [--no-keychain]        Health checks (read-only)
       spillover log [N]                       Recent launch decisions
       spillover open <folder> [--editor code] Open a folder in an editor
@@ -56,6 +57,8 @@ do {
         try commands.usage(args)
     case "sessions":
         commands.sessions(args)
+    case "stopped":
+        commands.stopped()
     case "statusline":
         commands.statusline()
     case "doctor":

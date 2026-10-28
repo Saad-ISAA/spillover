@@ -57,6 +57,9 @@ final class AppModel: ObservableObject {
     @Published var now = Date()
     @Published var selectedSection: MainSection? = .overview
     @Published var sessions: [SessionAssessment] = []
+    /// Chats stopped by a usage limit, with what Spillover will do about each.
+    @Published var stoppedChats: [StoppedChat] = []
+    var checkingStoppedChats = false
     @Published var autoPolicy = AutoPolicy()
     /// What each installed editor's Claude extension supports (checked after updates too).
     @Published var contracts: [Editor: ExtensionContract] = [:]
@@ -91,6 +94,8 @@ final class AppModel: ObservableObject {
                 self.refreshUsageSnapshots()
                 self.refreshSessions()
                 self.ticks += 1
+                // Stopped chats are resumed a minute after their limit resets: once a minute is enough.
+                if self.ticks % 2 == 0 { self.checkStoppedChats() }
                 // Token totals come from walking session logs: every ten minutes is plenty.
                 if self.ticks % 20 == 0 && !self.scanning { self.scanLocalUsage() }
                 if self.ticks % 6 == 0 { self.refreshLimits() } else { self.followSavedLimits() }

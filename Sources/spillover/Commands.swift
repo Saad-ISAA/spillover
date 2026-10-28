@@ -305,6 +305,46 @@ struct Commands {
         Out.table(rows)
     }
 
+    /// Chats stopped by a usage limit, and what Spillover knows about resuming each (read-only).
+    func stopped() {
+        let profiles = (try? ProfileStore(env: env).all()) ?? [Profile.builtInDefault()]
+        let stops = LimitStops(env: env).scan(profiles: profiles)
+        if stops.isEmpty {
+            Out.line("No chats stopped by a usage limit.")
+            return
+        }
+        let resolver = Resolver(env: env)
+        let usage = UsageStore(env: env)
+        let history = UsageHistory(env: env)
+        let time = DateFormatter()
+        time.dateFormat = "EEE HH:mm"
+        var rows: [[String]] = [["STOPPED", "ON", "CHAT", "STATE", "FOLDER"]]
+        for stop in stops {
+            var target: String?
+            switch resolver.resolve(cwd: stop.cwd, preferring: stop.profileId, record: false) {
+            case .routed(let p, _): target = p.id
+            case .unrouted: target = Profile.defaultID
+            case .refused: target = nil
+            }
+            let room = target.flatMap {
+                LimitStops.roomSince(usage.load(profileId: $0), history: history.load(profileId: $0), after: stop.stoppedAt)
+            }
+            let entry = LimitResumeLog(env: env).entries()[stop.conversationId]
+            var state = "waiting for room on \(target ?? "no account")"
+            if let outcome = entry?.outcome {
+                state = outcome
+            } else if let room {
+                let probe = LimitResumeLog.Entry(stoppedAt: stop.stoppedAt, roomSince: min(entry?.roomSince ?? room, room))
+                state = LimitResumeLog.isMissed(probe) ? "missed (room since \(time.string(from: room)))"
+                    : "resumes \(time.string(from: room.addingTimeInterval(LimitStops.grace))) on \(target!)"
+            }
+            rows.append([
+                time.string(from: stop.stoppedAt), stop.profileId, stop.title ?? "?", state, stop.cwd,
+            ])
+        }
+        Out.table(rows)
+    }
+
     // MARK: statusline (called by Claude Code)
 
     func statusline() {

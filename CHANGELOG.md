@@ -2,6 +2,17 @@
 
 ## 0.1.5 (unreleased)
 
+- Resume chats automatically (Setup → Auto, off until you turn it on). Spillover types "please
+  resume all work" into a chat in its own VS Code panel, and the chat restarts its own subagents
+  and background tasks:
+  - a minute after a usage limit the chat stopped on resets, in any folder (in an Auto folder,
+    as soon as another account has room, with the chat's history copied there);
+  - right after Auto moves a chat to another account, so Auto no longer has to wait for the
+    chat's background work before moving it.
+  Sessions lists chats stopped by a limit with when each one resumes. Spillover only types into
+  an idle chat with an empty message box, after you have left the keyboard for a moment, and
+  needs the Accessibility permission to do so.
+
 - Fixed: in an Auto folder, a chat you resumed after its account's limit reset was moved to
   another account (and its history copied there) whenever the folder had switched accounts while
   the first one was full. A resumed chat now stays on the account it was on while that account

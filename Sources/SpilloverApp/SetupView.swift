@@ -259,6 +259,26 @@ private struct AutoSettings: View {
         Text("A moved chat stays in its panel; its next message runs on the new account.")
             .font(TypeScale.meta).foregroundStyle(Ink.faint)
             .fixedSize(horizontal: false, vertical: true)
+        Rule()
+        HStack {
+            Text("Resume chats automatically").font(TypeScale.body).foregroundStyle(Ink.text)
+            Spacer()
+            Toggle("", isOn: Binding(
+                get: { model.autoPolicy.resumeChats },
+                set: { model.setResumeChats($0) }))
+            .toggleStyle(.switch).controlSize(.small).labelsHidden()
+        }
+        Text("In every folder: a minute after a chat's usage limit resets (or, in an Auto folder, once another account has room), and right after Auto moves a chat with background work, Spillover types \"please resume all work\" into that chat in its VS Code window. The chat restarts its own subagents and background tasks. It only types into an idle chat with an empty message box, and waits until you have left the keyboard for a moment.")
+            .font(TypeScale.meta).foregroundStyle(Ink.faint)
+            .fixedSize(horizontal: false, vertical: true)
+        if model.autoPolicy.resumeChats && !ChatSender.isAllowed {
+            HStack(spacing: 8) {
+                Text("Needs permission to type into VS Code: System Settings → Privacy & Security → Accessibility → Spillover.")
+                    .font(TypeScale.meta).foregroundStyle(Ink.tone(.warning))
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Allow…") { ChatSender.requestPermission() }.buttonStyle(QuietButtonStyle(tone: .warning))
+            }
+        }
     }
 
     private func move(_ index: Int, by delta: Int) {

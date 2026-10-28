@@ -9,9 +9,12 @@ struct ChatMove: Equatable {
         case waiting
         case switching
         case done
-        /// Moved because its account was about to stop working, while background work ran: that
-        /// work stopped with the old process. The chat's next message continues on the new account.
-        case workStopped
+        /// Moved while background work ran: that work stopped with the old process, and Spillover
+        /// sent the chat "please resume all work" in its panel, so it restarts it on the new account.
+        case resumed
+        /// Moved while background work ran, but the chat could not be sent the resume message
+        /// (why). Its next message continues on the new account.
+        case workStopped(String?)
         /// The chat was closed before it could be ended; it continues on the new account the
         /// next time it is opened.
         case closed
@@ -192,9 +195,10 @@ extension AppModel {
                 // Wait for a turn boundary, copy, and check again right before ending the process:
                 // a prompt sent during the copy would otherwise be cut off.
                 // Background tasks (subagents, background commands) live in the chat's process and
-                // stop with it, so a move waits for them. An automatic move stops waiting only when
-                // the account is about to stop working (the limit would stop that work anyway); the
-                // chat then continues on the new account with its next message.
+                // stop with it, so a move waits for them. An automatic move does not wait when
+                // resuming chats is on (the chat is told to resume its work in its panel after the
+                // switch) or when the account is about to stop working (the limit would stop that
+                // work anyway).
                 var ready = false
                 var hadBackgroundWork = false
                 let deadline = Date().addingTimeInterval(automatic ? 6 * 3600 : 15 * 60)
@@ -207,11 +211,16 @@ extension AppModel {
                     guard let transcript = conversations.transcript(id: id, cwd: cwd, in: source) else {
                         throw MoveFailure.transcriptMissing
                     }
-                    var nearlyOut = false
+                    // With resuming on, an automatic move need not wait: the chat is told to resume
+                    // its work in its panel on the new account right after the switch.
+                    var stopsWork = false
                     if automatic {
-                        nearlyOut = await MainActor.run { self.autoPolicy.isNearlyOut(self.snapshots[source.id], now: Date()) }
+                        stopsWork = await MainActor.run {
+                            (self.autoPolicy.resumeChats && ChatSender.isAllowed)
+                                || self.autoPolicy.isNearlyOut(self.snapshots[source.id], now: Date())
+                        }
                     }
-                    let waitsForTasks = !nearlyOut
+                    let waitsForTasks = !stopsWork
                     if Self.isReady(transcript, since: session.startedAt, acceptStalled: !automatic, waitsForTasks: waitsForTasks) {
                         try conversations.ensure(id: id, cwd: cwd, target: target, among: profiles)
                         if Self.isReady(transcript, since: session.startedAt, acceptStalled: !automatic, waitsForTasks: waitsForTasks) {
@@ -248,7 +257,14 @@ extension AppModel {
                 // folder's account. (Opening the folder or a session link could open a second
                 // window or a second copy of the chat in whichever window is in front.)
                 if hadBackgroundWork {
-                    await MainActor.run { self.finishMove(id, .workStopped, target: target, folder: cwd) }
+                    let resumes = await MainActor.run { self.autoPolicy.resumeChats && ChatSender.isAllowed }
+                    var why: String? = "resuming chats is off"
+                    if resumes {
+                        let transcript = conversations.transcript(id: id, cwd: cwd, in: target)
+                        why = await Self.resumeMovedChat(conversationId: id, folder: cwd, transcript: transcript)
+                    }
+                    let outcome: ChatMove.Phase = why == nil ? .resumed : .workStopped(why)
+                    await MainActor.run { self.finishMove(id, outcome, target: target, folder: cwd) }
                     return
                 }
                 let outcome = await Self.confirmNotWrongAccount(id: id, on: target, env: env)
@@ -270,8 +286,10 @@ extension AppModel {
             // The extension asks which account it is on once per window, so its Account panel
             // keeps the old email until the window reloads; the chat itself is already moved.
             show(.success, "\(name) chat moved to \(target.displayName) with its history: its next message runs there. Claude's Account panel shows the new email after you reload the window.")
-        case .workStopped:
-            show(.info, "\(name) chat moved to \(target.displayName): its account was about to run out, so its background work stopped. Send a message in that chat (for example \"resume your work\") to continue it on \(target.displayName).")
+        case .resumed:
+            show(.success, "\(name) chat moved to \(target.displayName) and was told to resume its work there (\"\(Self.movedMessage)\"); it restarts its background tasks itself.")
+        case .workStopped(let why):
+            show(.info, "\(name) chat moved to \(target.displayName); its background work stopped with the move\(why.map { " and it could not be resumed (\($0))" } ?? ""). Send it a message (for example \"resume all work\") to continue on \(target.displayName).")
         case .closed:
             show(.info, "The \(name) chat was closed. It continues on \(target.displayName), with its history, when you reopen it.")
         case .failed(let why):

@@ -18,20 +18,25 @@ public struct AutoPolicy: Codable, Equatable, Sendable {
     public var moveOpenChats = true
     /// Accounts Auto must not use right now (kept up to date by the app: not logged in).
     public var unavailable: [String] = []
+    /// Send "please resume all work" to a chat in its own panel when it can continue: after a move
+    /// that stopped its background work, and once a limit it stopped on has reset. Applies to every
+    /// folder. Off until the user turns it on (it needs the Accessibility permission).
+    public var resumeChats = false
 
     public init(
         order: [String] = [], threshold: Double = 90, runOutMinutes: Double = 30, moveOpenChats: Bool = true,
-        unavailable: [String] = []
+        unavailable: [String] = [], resumeChats: Bool = false
     ) {
         self.order = order
         self.threshold = threshold
         self.runOutMinutes = runOutMinutes
         self.moveOpenChats = moveOpenChats
         self.unavailable = unavailable
+        self.resumeChats = resumeChats
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, order, threshold, runOutMinutes, moveOpenChats, unavailable
+        case version, order, threshold, runOutMinutes, moveOpenChats, unavailable, resumeChats
     }
 
     public init(from decoder: Decoder) throws {
@@ -42,6 +47,7 @@ public struct AutoPolicy: Codable, Equatable, Sendable {
         runOutMinutes = try c.decodeIfPresent(Double.self, forKey: .runOutMinutes) ?? 30
         moveOpenChats = try c.decodeIfPresent(Bool.self, forKey: .moveOpenChats) ?? true
         unavailable = try c.decodeIfPresent([String].self, forKey: .unavailable) ?? []
+        resumeChats = try c.decodeIfPresent(Bool.self, forKey: .resumeChats) ?? false
     }
 
     /// The accounts Auto may choose from, in preference order: listed, not marked unavailable,

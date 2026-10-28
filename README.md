@@ -14,6 +14,7 @@ It lives in the menu bar and also shows each account's session and weekly limits
 - **Every launch path**: the Claude Code editor panel, `claude` in VS Code's terminal, iTerm, Ghostty, Terminal.
 - **Move open chats**: switch a VS Code window to another account and its chats move with their history, each after its current reply.
 - **Auto**: folders set to Auto start each chat on the account with the most room, and move open chats on when an account reaches its limit threshold (90% by default).
+- **Resume after limits** (opt-in): a chat that stopped on a usage limit is sent "please resume all work" in its own VS Code panel a minute after its account has room again, and a chat Auto moved is told to resume its background work on the new account. Needs the Accessibility permission; it only types into an idle chat with an empty message box, after you have left the keyboard for a moment.
 - **Usage at a glance**: 5-hour and weekly limits for every account, checked every few minutes the way `/usage` does (no message sent), pace forecasts, and token totals from local session logs. Optional notifications at 80% and 95%.
 - **Live sessions**: every running Claude chat, which account it is on, and which ones still use an old account after you reassigned their folder.
 - **Light, dark or system** appearance, in the window and the menu bar.
@@ -143,6 +144,7 @@ The app bundles a CLI with the same features, handy for scripts and troubleshoot
 spillover status                     # accounts, logins, limits, assignments, setup
 spillover route which ~/Code/app     # which account would Claude use here?
 spillover sessions                   # running Claude sessions and their accounts
+spillover stopped                    # chats stopped by a usage limit, and when each resumes
 spillover doctor                     # read-only health checks
 spillover log 20                     # recent launch decisions
 spillover help                       # everything else

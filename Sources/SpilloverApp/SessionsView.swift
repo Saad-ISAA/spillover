@@ -19,6 +19,8 @@ struct SessionsView: View {
 
             byAccount
 
+            if !model.stoppedChats.isEmpty { stoppedByLimit }
+
             VStack(spacing: 0) {
                 HStack {
                     Text("Folder").frame(maxWidth: .infinity, alignment: .leading)
@@ -47,6 +49,57 @@ struct SessionsView: View {
                 .foregroundStyle(Ink.faint)
         }
         .onAppear { model.refreshSessions() }
+    }
+
+    /// Chats that stopped on a usage limit, and what Spillover will do about each.
+    private var stoppedByLimit: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Stopped by a limit").font(TypeScale.bodyStrong).foregroundStyle(Ink.text).padding(.bottom, 8)
+            Rule()
+            ForEach(model.stoppedChats) { chat in
+                HStack {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(chat.stop.title ?? "Untitled chat").font(TypeScale.body).foregroundStyle(Ink.text).lineLimit(1)
+                        Text(Fmt.folderName(chat.stop.cwd)).font(TypeScale.meta).foregroundStyle(Ink.faint).lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(model.profile(id: chat.targetProfileId ?? "")?.displayName ?? "–")
+                        .font(TypeScale.body).foregroundStyle(Ink.muted).lineLimit(1)
+                        .frame(width: 150, alignment: .leading)
+                    Text("stopped \(Fmt.moment(chat.stop.stoppedAt, now: model.now))")
+                        .font(TypeScale.meta.monospacedDigit()).foregroundStyle(Ink.muted)
+                        .frame(width: 110, alignment: .trailing)
+                    stoppedState(chat).frame(width: 170, alignment: .trailing)
+                }
+                .padding(.vertical, 10)
+                Rule()
+            }
+            Text(model.autoPolicy.resumeChats
+                ? "Spillover sends each chat \"\(LimitStops.message)\" in its own panel a minute after its account has room again (in an Auto folder that can be another account), once you have left the keyboard for a moment."
+                : "Turn on Resume chats automatically under Setup to have Spillover continue these chats when their account has room again.")
+                .font(TypeScale.meta).foregroundStyle(Ink.faint).padding(.top, 8)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder
+    private func stoppedState(_ chat: StoppedChat) -> some View {
+        if let outcome = chat.entry.outcome {
+            if outcome == "resumed" {
+                Pill(text: "Resumed", tone: .positive)
+            } else {
+                Pill(text: "Not resumed", tone: .negative).help(outcome)
+            }
+        } else if chat.targetProfileId == nil {
+            Pill(text: "Folder refused", tone: .negative)
+        } else if LimitResumeLog.isMissed(chat.entry, now: model.now) {
+            Pill(text: "Not resumed")
+                .help("Its account has had room for more than \(Int(LimitStops.resumeWindow / 3600)) hours, so it was left as it is. Send it a message to continue.")
+        } else if let at = chat.expected {
+            Pill(text: at <= model.now ? "Resuming…" : "Resumes \(Fmt.moment(at, now: model.now))", tone: .data)
+        } else {
+            Pill(text: "Waiting for room")
+        }
     }
 
     /// How many sessions each account carries right now.

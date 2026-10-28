@@ -34,8 +34,9 @@ public struct Resolver {
     }
 
     /// `preferring`: for Auto folders, the account that already holds the conversation being
-    /// resumed (kept while it has room).
-    public func resolve(cwd: String, preferring: String? = nil) -> Resolution {
+    /// resumed (kept while it has room). `record: false` asks without remembering the choice as
+    /// the folder's account (for looking ahead, not for a launch).
+    public func resolve(cwd: String, preferring: String? = nil, record: Bool = true) -> Resolution {
         let routes: [Route]
         switch routeStore.load() {
         case .missing:
@@ -69,7 +70,7 @@ public struct Resolver {
         let profile: Profile
         do {
             if route.profileId == Profile.autoID {
-                switch chooseAuto(folder: route.folder, preferring: preferring) {
+                switch chooseAuto(folder: route.folder, preferring: preferring, record: record) {
                 case .success(let p): profile = p
                 case .failure(let refusal): return .refused(refusal)
                 }
@@ -104,7 +105,7 @@ public struct Resolver {
     }
 
     /// Auto folders: the policy picks among the registered accounts using their latest limits.
-    private func chooseAuto(folder: String, preferring: String?) -> Result<Profile, Refusal> {
+    private func chooseAuto(folder: String, preferring: String?, record: Bool) -> Result<Profile, Refusal> {
         let policy: AutoPolicy
         switch AutoPolicyStore(env: env).load() {
         case .loaded(let p): policy = p
@@ -127,7 +128,7 @@ public struct Resolver {
         else {
             return .failure(Refusal(code: .noAccounts, message: "No usable account for Auto (none logged in?). Run `spillover doctor`."))
         }
-        choices.record(folder: folder, profileId: chosen.id)
+        if record { choices.record(folder: folder, profileId: chosen.id) }
         return .success(chosen)
     }
 }
