@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.4 (unreleased)
+## 0.1.4 (2026-10-28)
 
 - Auto no longer stops a chat's background work (subagents, background commands) when its account
   reaches the threshold: the chat waits until that work is done, then moves at its next pause.
