@@ -105,7 +105,7 @@ no longer need them (their logins stay in Keychain until you log out of each fir
 
 ## First steps (in the app)
 
-1. **Accounts → Add account.** Name it (e.g. *Work*), choose which of your existing settings, skills and commands to reuse, and log in: a Terminal window opens the official `claude auth login`. Log in with the subscription you want for that account. Repeat for each subscription.
+1. **Accounts → Add account.** Name it (e.g. *Work*), choose which of your existing settings, skills, commands and MCP servers to reuse, and log in: a Terminal window opens the official `claude auth login`. Log in with the subscription you want for that account. Repeat for each subscription.
 2. **Folders → Assign a folder…** Pick the account, then the project folder. Recent VS Code folders are listed with a one-click account picker.
 3. **Setup → Visual Studio Code → Connect.** Then start a new Claude chat (or reload the window).
 4. Optional: **Setup → Terminals** so `claude` in any terminal follows the same assignments, and **Usage → Live limits in Terminal chats** if you want limits updated after every Terminal reply.

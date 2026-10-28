@@ -6,8 +6,15 @@ public struct ProfileSharing {
     /// Items that may be shared. Anything else is refused.
     public static let shareable: [String] = [
         "settings.json", "CLAUDE.md", "skills", "agents", "commands", "hooks", "plugins",
-        "output-styles", "keybindings.json",
+        "output-styles", "keybindings.json", mcpServers,
     ]
+
+    /// MCP servers added with `claude mcp add` live in the account's state file (`.claude.json`),
+    /// next to its sign-in details, so they cannot be linked into place like the other items.
+    /// Sharing them links this name to the source account's state file, and the launcher gives
+    /// Claude that link with `--mcp-config`: Claude reads the servers itself; Spillover never
+    /// reads or copies the entries (which often hold API keys).
+    public static let mcpServers = "mcp-servers.json"
 
     /// Items that must never be linked between accounts: account identity, credentials,
     /// conversation history and per-session state. Checked even if `shareable` grows.
@@ -57,6 +64,29 @@ public struct ProfileSharing {
         URL(fileURLWithPath: profile.configDir ?? env.paths.defaultClaudeDir.path, isDirectory: true)
     }
 
+    /// How an item is named on screen.
+    public static func label(_ item: String) -> String {
+        item == mcpServers ? "MCP servers" : item
+    }
+
+    /// Where a shared item comes from in `profile`.
+    func sourceURL(of item: String, in profile: Profile) -> URL {
+        if item == Self.mcpServers { return AccountUsageFetcher(env: env).stateFile(for: profile) }
+        return directory(of: profile).appendingPathComponent(item)
+    }
+
+    /// True when `profile` has the item to share.
+    public func canShare(_ item: String, from profile: Profile) -> Bool {
+        FileManager.default.fileExists(atPath: sourceURL(of: item, in: profile).path)
+    }
+
+    /// The account's link to shared MCP servers, when it has one that still resolves.
+    public func sharedMcpConfig(for profile: Profile) -> URL? {
+        guard !profile.isDefault, case .linked = state(of: Self.mcpServers, in: profile) else { return nil }
+        let link = directory(of: profile).appendingPathComponent(Self.mcpServers)
+        return FileManager.default.fileExists(atPath: link.path) ? link : nil
+    }
+
     public func state(of item: String, in profile: Profile) -> ItemState {
         let url = directory(of: profile).appendingPathComponent(item)
         let fm = FileManager.default
@@ -73,7 +103,7 @@ public struct ProfileSharing {
         guard !target.isDefault else { throw ShareError.targetIsDefault }
         guard source.id != target.id else { throw ShareError.sameProfile }
         let fm = FileManager.default
-        let src = directory(of: source).appendingPathComponent(item)
+        let src = sourceURL(of: item, in: source)
         guard fm.fileExists(atPath: src.path) else { throw ShareError.sourceMissing(item) }
         let dst = directory(of: target).appendingPathComponent(item)
 

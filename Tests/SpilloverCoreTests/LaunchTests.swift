@@ -38,6 +38,42 @@ final class LaunchPlannerTests: XCTestCase {
         XCTAssertEqual(plan.environment["SPILLOVER_PROFILE"], work.id)
     }
 
+    func testSharedMcpServersReachChatsThroughTheLauncher() throws {
+        let (box, env, _) = try setup()
+        let service = AppService(env: env)
+        let work = try service.profiles.create(displayName: "work")
+        let project = try box.mkdir("p")
+        try service.assign(folder: project.path, to: work.id)
+        let request = { (args: [String]) in
+            LaunchRequest(mode: .editorWrapper, cwd: project.path, args: args, environment: env.processEnv)
+        }
+        func extras(_ args: [String]) -> [String] {
+            if case .exec(let plan, _) = LaunchPlanner(env: env).plan(request(args)) { return plan.extraArgs }
+            return ["refused"]
+        }
+        // Not shared yet: nothing added.
+        XCTAssertEqual(extras(["--output-format", "stream-json"]), [])
+
+        // Sharing links the name to the normal login's state file (the entries are not read).
+        try box.write(".claude.json", #"{"mcpServers": {"tools": {"command": "x"}}}"#)
+        let sharing = ProfileSharing(env: env)
+        XCTAssertTrue(sharing.canShare(ProfileSharing.mcpServers, from: .builtInDefault()))
+        try sharing.share(ProfileSharing.mcpServers, from: .builtInDefault(), to: work)
+        let link = URL(fileURLWithPath: work.configDir!).appendingPathComponent(ProfileSharing.mcpServers)
+        XCTAssertEqual(
+            try FileManager.default.destinationOfSymbolicLink(atPath: link.path), box.home.appendingPathComponent(".claude.json").path)
+
+        // Chats get it; Claude's own arguments are left as they were.
+        guard case .exec(let plan, _) = LaunchPlanner(env: env).plan(request(["--resume=abc"])) else { return XCTFail() }
+        XCTAssertEqual(plan.extraArgs, ["--mcp-config", link.path])
+        XCTAssertEqual(plan.args, ["--resume=abc"])
+        // Commands and launches that choose their own MCP configuration do not.
+        XCTAssertEqual(extras(["auth", "status", "--json"]), [])
+        XCTAssertEqual(extras(["--strict-mcp-config", "--mcp-config", "/x.json"]), [])
+        // The normal login itself never gets the flag.
+        XCTAssertNil(sharing.sharedMcpConfig(for: .builtInDefault()))
+    }
+
     func testRoutedToDefaultUnsetsDirectory() throws {
         let (box, env, _) = try setup()
         let project = try box.mkdir("p")

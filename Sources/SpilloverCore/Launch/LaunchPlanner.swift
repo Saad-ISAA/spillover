@@ -23,6 +23,15 @@ public struct LaunchPlan: Equatable, Sendable {
     public var executable: String
     public var args: [String]
     public var environment: [String: String]
+    /// Arguments Spillover adds in front of Claude's own (which are passed on unchanged).
+    public var extraArgs: [String] = []
+
+    public init(executable: String, args: [String], environment: [String: String], extraArgs: [String] = []) {
+        self.executable = executable
+        self.args = args
+        self.environment = environment
+        self.extraArgs = extraArgs
+    }
 }
 
 public enum LaunchDecision: Equatable, Sendable {
@@ -93,9 +102,18 @@ public struct LaunchPlanner {
         if let conversation {
             outcome += handOff(conversation, cwd: request.cwd, to: target, among: profiles)
         }
+        // An account that shares MCP servers gets them for chats (not for commands such as
+        // `claude auth status`), unless the launch already chooses its MCP configuration.
+        var extraArgs: [String] = []
+        if let mcp = ProfileSharing(env: env).sharedMcpConfig(for: target), SessionScanner.isChat(argv: request.args),
+            !request.args.contains(where: { $0.hasPrefix("--mcp-config") || $0 == "--strict-mcp-config" })
+        {
+            extraArgs = ["--mcp-config", mcp.path]
+            outcome += "+mcp"
+        }
         log.append(mode: request.mode, cwd: request.cwd, profile: profileID, outcome: outcome)
         return .exec(
-            LaunchPlan(executable: executable, args: request.args, environment: environment),
+            LaunchPlan(executable: executable, args: request.args, environment: environment, extraArgs: extraArgs),
             resolution)
     }
 

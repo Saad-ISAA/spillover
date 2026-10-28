@@ -13,6 +13,8 @@ Fixes for moving chats between accounts.
   to run out; a pending move is dropped when the account has room again.
 - Moving a chat no longer opens a new VS Code window or a second copy of the chat: it stays in its
   panel and its next message continues on the new account.
+- Accounts can share your MCP servers (Accounts → Shared from your normal setup → MCP servers):
+  Claude reads them from your normal login's settings; Spillover never copies them.
 - Limits are picked up within about 30 seconds of Claude saving them.
 - Helper processes (the Chrome extension host, plugin runs in temporary folders) are no longer
   listed or moved as chats.

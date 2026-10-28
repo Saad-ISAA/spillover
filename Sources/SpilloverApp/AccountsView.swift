@@ -252,15 +252,15 @@ private struct SharingToggles: View {
     var body: some View {
         let sharing = ProfileSharing(env: model.env)
         VStack(alignment: .leading, spacing: 8) {
-            Text("Linked items stay in sync with your normal ~/.claude. Logins, history and sessions are never shared.")
+            Text("Linked items stay in sync with your normal ~/.claude. Logins, history and sessions are never shared; MCP servers that sign in through a browser ask once per account.")
                 .font(TypeScale.meta)
                 .foregroundStyle(Ink.muted)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), alignment: .leading)], alignment: .leading) {
                 ForEach(ProfileSharing.shareable, id: \.self) { item in
                     let state = sharing.state(of: item, in: profile)
-                    let available = sharing.state(of: item, in: .builtInDefault()) != .absent
+                    let available = sharing.canShare(item, from: .builtInDefault())
                     Toggle(
-                        item,
+                        ProfileSharing.label(item),
                         isOn: Binding(
                             get: { if case .linked = state { return true } else { return false } },
                             set: { model.share(item, into: profile, enabled: $0) }))
@@ -281,7 +281,9 @@ struct AddAccountSheet: View {
     @State private var name = ""
     @State private var mode = 0
     @State private var existingDir = ""
-    @State private var shared: Set<String> = ["skills", "commands", "agents", "CLAUDE.md", "plugins", "hooks"]
+    @State private var shared: Set<String> = [
+        "skills", "commands", "agents", "CLAUDE.md", "plugins", "hooks", ProfileSharing.mcpServers,
+    ]
     @State private var logInNow = true
 
     var body: some View {
@@ -304,7 +306,7 @@ struct AddAccountSheet: View {
                     Text("Reuse from your normal setup").font(TypeScale.bodyStrong).foregroundStyle(Ink.text)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), alignment: .leading)], alignment: .leading) {
                         ForEach(ProfileSharing.shareable, id: \.self) { item in
-                            Toggle(item, isOn: Binding(
+                            Toggle(ProfileSharing.label(item), isOn: Binding(
                                 get: { shared.contains(item) },
                                 set: { if $0 { shared.insert(item) } else { shared.remove(item) } }))
                             .toggleStyle(.checkbox)

@@ -45,6 +45,7 @@ case .exec(let plan, _):
     cEnv.append(nil)
 
     var cArgs: [UnsafeMutablePointer<CChar>?] = [strdup(plan.executable)]
+    for extra in plan.extraArgs { cArgs.append(strdup(extra)) }
     for i in 1..<Int(CommandLine.argc) { cArgs.append(CommandLine.unsafeArgv[i]) }
     cArgs.append(nil)
 
