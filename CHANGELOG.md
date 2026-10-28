@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.3 (unreleased)
+## 0.1.3 (2026-10-28)
 
 - Fixed: after Auto moved a chat that had background work and resumed it on the new account,
   typing in that chat in VS Code started a second copy of it. The copy reported the background

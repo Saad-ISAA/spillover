@@ -1,7 +1,7 @@
 import Foundation
 import SpilloverCore
 
-let version = "0.1.2"
+let version = "0.1.3"
 
 let help = """
     spillover \(version) — one Claude subscription per folder, window and terminal.
