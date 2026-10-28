@@ -83,38 +83,6 @@ final class LaunchPlannerTests: XCTestCase {
         XCTAssertNil(sharing.sharedMcpConfig(for: .builtInDefault()))
     }
 
-    func testChatResumedBySpilloverIsNotStartedTwice() throws {
-        let (box, env, _) = try setup()
-        let id = "c888bd34-ec13-4139-9680-65f41ed5e095"
-        let binary = "/Users/example/.vscode/extensions/anthropic.claude-code-2.1.312-darwin-arm64/resources/native-binary/claude"
-        let hidden = RunningSession(
-            pid: 35308, executable: binary, cwd: box.home.path, configDir: nil, spilloverProfile: nil,
-            startedAt: Date(), conversationId: id, resumedBySpillover: true)
-        let planner = LaunchPlanner(env: env, resumedRun: { $0 == id ? hidden : nil })
-        func plan(_ args: [String], _ environment: [String: String] = env.processEnv) -> LaunchDecision {
-            planner.plan(LaunchRequest(mode: .editorWrapper, cwd: box.home.path, args: args, environment: environment))
-        }
-
-        // The editor reopening that chat is refused, with a message saying why.
-        guard case .refuse(let message) = plan([binary, "--output-format", "stream-json", "--resume=\(id)"]) else {
-            return XCTFail()
-        }
-        XCTAssertTrue(message.contains("still working in the background"))
-        XCTAssertTrue(message.contains("Take over"))
-        // The resumed run itself, other chats and new chats start as usual.
-        var marked = env.processEnv
-        marked[ProfileEnvironment.resumedRunKey] = "1"
-        guard case .exec = plan(["--resume", id, "-p", ChatResumer.message], marked) else { return XCTFail() }
-        guard case .exec = plan([binary, "--resume=1b671a64-40d5-491e-99b0-da01ff1f3341"]) else { return XCTFail() }
-        guard case .exec = plan([binary, "--output-format", "stream-json"]) else { return XCTFail() }
-        // Once it has finished, the chat opens again.
-        let finished = LaunchPlanner(env: env, resumedRun: { _ in nil })
-        guard
-            case .exec = finished.plan(
-                LaunchRequest(mode: .editorWrapper, cwd: box.home.path, args: ["--resume=\(id)"], environment: env.processEnv))
-        else { return XCTFail() }
-    }
-
     func testRoutedToDefaultUnsetsDirectory() throws {
         let (box, env, _) = try setup()
         let project = try box.mkdir("p")

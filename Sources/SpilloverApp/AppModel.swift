@@ -261,7 +261,6 @@ final class AppModel: ObservableObject {
             let scanner = SessionScanner(env: env)
             let assessed = scanner.assess(DemoSessions.load(env) ?? scanner.scan())
             await MainActor.run {
-                self.noteFinishedResumedRuns(before: self.sessions, now: assessed)
                 self.sessions = assessed
                 if !DemoSessions.isActive(env) { self.autoMoveChatsIfNeeded() }
             }

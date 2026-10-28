@@ -7,7 +7,8 @@ import Foundation
 /// new one, the first account in `order` with room is used; an account has room while it is not
 /// full and no window is forecast to run out within `runOutMinutes`. When none has room, the
 /// least used one is taken (work continues rather than being refused). Open chats move only when
-/// their account is full, at their next idle moment, when `moveOpenChats` is on.
+/// their account is full, at their next idle moment, when `moveOpenChats` is on; a chat with
+/// background work running waits for it unless its account is nearly out (`isNearlyOut`).
 public struct AutoPolicy: Codable, Equatable, Sendable {
     public var version = 1
     /// Account ids in order of preference. Empty means every account, in registry order.
@@ -81,6 +82,28 @@ public struct AutoPolicy: Codable, Equatable, Sendable {
         for w in snapshot.windows {
             if case .runsOut(let at, _) = PaceForecast.forecast(w, now: now)?.outlook,
                 at.timeIntervalSince(now) <= runOutMinutes * 60
+            {
+                return true
+            }
+        }
+        return false
+    }
+
+    /// Percentage, and minutes before a forecast run-out, at which an account counts as about to
+    /// stop working.
+    public static let nearlyOutPercentage: Double = 98
+    public static let nearlyOutMinutes: Double = 10
+
+    /// True when the account is about to stop working: nearly at a limit, or forecast to reach one
+    /// within minutes. Only then does Auto end a chat whose background work is still running;
+    /// below that the chat waits for its work, since ending it stops that work (at that point the
+    /// limit would stop it anyway).
+    public func isNearlyOut(_ snapshot: UsageSnapshot?, now: Date = Date()) -> Bool {
+        guard let snapshot else { return false }
+        if snapshot.peakPercentage(at: now) >= Self.nearlyOutPercentage { return true }
+        for w in snapshot.windows {
+            if case .runsOut(let at, _) = PaceForecast.forecast(w, now: now)?.outlook,
+                at.timeIntervalSince(now) <= Self.nearlyOutMinutes * 60
             {
                 return true
             }

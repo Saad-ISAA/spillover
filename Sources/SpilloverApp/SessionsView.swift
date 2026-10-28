@@ -94,7 +94,7 @@ private struct SessionRow: View {
                 .font(TypeScale.meta.monospacedDigit())
                 .foregroundStyle(Ink.muted)
                 .frame(width: 90, alignment: .trailing)
-            stateLabel.frame(width: 200, alignment: .trailing)
+            stateLabel.frame(width: 170, alignment: .trailing)
         }
         .padding(.vertical, 10)
         .contextMenu {
@@ -107,21 +107,6 @@ private struct SessionRow: View {
 
     @ViewBuilder
     private var stateLabel: some View {
-        if assessment.session.resumedBySpillover {
-            HStack(spacing: 6) {
-                Pill(text: "In background", tone: .data)
-                    .help("Spillover moved this chat to another account and resumed it here so its background work could continue. The chat opens again in VS Code when it is done.")
-                Button("Take over") { model.takeOver(assessment) }
-                    .buttonStyle(QuietButtonStyle(tone: .warning))
-                    .help("Stops this background run (and its background tasks) so you can continue the chat in VS Code now.")
-            }
-        } else {
-            assessedLabel
-        }
-    }
-
-    @ViewBuilder
-    private var assessedLabel: some View {
         switch assessment.state {
         case .matches:
             Pill(text: "As assigned", tone: .positive)

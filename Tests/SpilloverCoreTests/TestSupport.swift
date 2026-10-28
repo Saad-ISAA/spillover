@@ -82,13 +82,6 @@ final class FakeRunner: CommandRunning, @unchecked Sendable {
         return handler(executable, args)
     }
 
-    func spawnDetached(_ executable: String, _ args: [String], env: [String: String]?, directory: URL?) throws -> Int32 {
-        lock.lock()
-        _calls.append(Call(executable: executable, args: args, env: env, stdin: nil, directory: directory))
-        lock.unlock()
-        return 4242
-    }
-
     func runInteractive(_ executable: String, _ args: [String], env: [String: String]?) -> Int32 {
         lock.lock()
         _calls.append(Call(executable: executable, args: args, env: env, stdin: nil))

@@ -68,15 +68,12 @@ public struct LaunchPlanner {
     private let resolver: Resolver
     private let locator: RealClaudeLocator
     private let log: LaunchLog
-    /// Spillover's own resumed run of a conversation, while it runs (process scan by default).
-    private let resumedRun: (String) -> RunningSession?
 
-    public init(env: SBEnvironment, resumedRun: ((String) -> RunningSession?)? = nil) {
+    public init(env: SBEnvironment) {
         self.env = env
         self.resolver = Resolver(env: env)
         self.locator = RealClaudeLocator(env: env)
         self.log = LaunchLog(env: env)
-        self.resumedRun = resumedRun ?? { SessionScanner(env: env).resumedRun(of: $0) }
     }
 
     public func plan(_ request: LaunchRequest) -> LaunchDecision {
@@ -88,15 +85,6 @@ public struct LaunchPlanner {
             ConversationStore(env: env).holders(id: $0, cwd: request.cwd, among: profiles).first?.profile.id
         }
         let resolution: Resolution = bypass ? .unrouted : resolver.resolve(cwd: request.cwd, preferring: holder)
-
-        // A chat Spillover resumed by itself runs its background work in that process; a second
-        // copy started from the editor would run the same tasks again, in the same files.
-        if let conversation, request.environment[ProfileEnvironment.resumedRunKey] != "1",
-            let running = resumedRun(conversation)
-        {
-            log.append(mode: request.mode, cwd: request.cwd, profile: "-", outcome: "refused:resumedRunning")
-            return .refuse(Self.resumedRunMessage(running))
-        }
 
         if case .refused(let refusal) = resolution {
             log.append(
@@ -147,16 +135,6 @@ public struct LaunchPlanner {
                 executable: executable, args: request.args, environment: environment, extraArgs: extraArgs,
                 extraArgsIndex: request.args.firstIndex(of: "--") ?? request.args.count),
             resolution)
-    }
-
-    static func resumedRunMessage(_ run: RunningSession) -> String {
-        let since = run.startedAt.map { " since " + DateFormatter.localizedString(from: $0, dateStyle: .none, timeStyle: .short) } ?? ""
-        return """
-            spillover: this chat is still working in the background\(since) (pid \(run.pid)). Spillover moved it to \
-            another account and resumed it there, and its background tasks run in that process, so it \
-            cannot be opened a second time. Send your message again when it has finished, or choose \
-            Take over for this chat under Sessions in Spillover to stop it and continue here.
-            """
     }
 
     /// Claude's arguments without the Claude binary that editors pass first to the wrapper.

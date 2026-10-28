@@ -59,40 +59,6 @@ final class ConversationTests: XCTestCase {
         XCTAssertNotNil(conversations.transcript(id: id, cwd: "/elsewhere", in: .builtInDefault()))
     }
 
-    func testResumeKeepsOnlyTheChatsModeAndModelFlags() throws {
-        let argv = [
-            "--output-format", "stream-json", "--max-thinking-tokens=31999", "--permission-prompt-tool=stdio",
-            "--resume=abc", "--setting-sources=user,project,local", "--permission-mode=bypassPermissions",
-            "--allow-dangerously-skip-permissions", "--model", "opus", "--debug",
-        ]
-        XCTAssertEqual(
-            RunningSession.resumeFlags(from: argv),
-            [
-                "--max-thinking-tokens=31999", "--setting-sources=user,project,local", "--permission-mode=bypassPermissions",
-                "--allow-dangerously-skip-permissions", "--model", "opus",
-            ])
-
-        let box = try Sandbox()
-        let runner = FakeRunner()
-        let pid = try ChatResumer(env: box.env, runner: runner).resume(
-            conversationId: "1b671a64-40d5-491e-99b0-da01ff1f3341", folder: "/Users/example/Code/api",
-            flags: ["--permission-mode=bypassPermissions"])
-        XCTAssertEqual(pid, 4242)
-        let call = try XCTUnwrap(runner.calls.first)
-        // Through the launcher, so the folder's account and the history handoff apply.
-        XCTAssertEqual(call.executable, box.env.paths.launcher.path)
-        XCTAssertEqual(call.directory?.path, "/Users/example/Code/api")
-        XCTAssertEqual(
-            call.args,
-            [
-                "--resume", "1b671a64-40d5-491e-99b0-da01ff1f3341", "-p", ChatResumer.message, "--output-format", "json",
-                "--permission-mode=bypassPermissions",
-            ])
-        XCTAssertEqual(ConversationID.from(args: call.args), "1b671a64-40d5-491e-99b0-da01ff1f3341")
-        // Marked, so the editor cannot start the same chat a second time while it runs.
-        XCTAssertEqual(call.env?[ProfileEnvironment.resumedRunKey], "1")
-    }
-
     func testBackgroundTasksKeepAChatBusy() {
         let start = ISO8601DateFormatter().date(from: "2026-10-27T21:55:00Z")!
         let agent = #"{"type":"user","timestamp":"2026-10-27T21:58:08.100Z","toolUseResult":{"isAsync":true,"status":"async_launched","agentId":"a08b632472fe3d6b1"}}"#
@@ -258,6 +224,29 @@ final class AutoPolicyTests: XCTestCase {
         XCTAssertTrue(AutoPolicy().isOutOfRoom(s, now: now))
         XCTAssertFalse(AutoPolicy().isOutOfRoom(snapshot("a", five: 20), now: now))
         XCTAssertFalse(AutoPolicy().isOutOfRoom(nil, now: now))
+    }
+
+    func testOnlyANearlyOutAccountCutsBackgroundWorkShort() {
+        let policy = AutoPolicy(threshold: 80)
+        // At the threshold (the move that stopped running subagents at 80%): full, not nearly out.
+        XCTAssertTrue(policy.isFull(snapshot("a", five: 81), now: now))
+        XCTAssertFalse(policy.isNearlyOut(snapshot("a", five: 81), now: now))
+        // 97% of the week with days to go, used slowly: still working for a while.
+        XCTAssertFalse(policy.isNearlyOut(snapshot("a", five: 20, seven: 97), now: now))
+        XCTAssertFalse(policy.isNearlyOut(nil, now: now))
+        XCTAssertTrue(policy.isNearlyOut(snapshot("a", five: 98), now: now))
+        XCTAssertTrue(policy.isNearlyOut(snapshot("a", five: 20, seven: 99), now: now))
+        // Forecast to run out within 10 minutes counts (85% half an hour into the window); within
+        // 30 does not.
+        let soon = UsageSnapshot(profileId: "a", capturedAt: now, windows: [
+            .init(kind: .fiveHour, usedPercentage: 85, resetsAt: now.addingTimeInterval(4 * 3600 + 30 * 60))
+        ])
+        XCTAssertTrue(policy.isNearlyOut(soon, now: now))
+        let later = UsageSnapshot(profileId: "a", capturedAt: now, windows: [
+            .init(kind: .fiveHour, usedPercentage: 78, resetsAt: now.addingTimeInterval(3 * 3600 + 20 * 60))
+        ])
+        XCTAssertTrue(policy.isOutOfRoom(later, now: now))
+        XCTAssertFalse(policy.isNearlyOut(later, now: now))
     }
 
     func testAFolderKeepsItsAccountUntilItIsFull() throws {

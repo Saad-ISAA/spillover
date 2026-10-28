@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.4 (unreleased)
+
+- Auto no longer stops a chat's background work (subagents, background commands) when its account
+  reaches the threshold: the chat waits until that work is done, then moves at its next pause.
+  Only when the account is about to stop working (98% of a limit, or about to run out within 10
+  minutes) does a busy chat move anyway; Spillover then says its background work stopped, and
+  your next message in that chat continues on the new account.
+- Spillover no longer resumes moved chats in a hidden background run. The chat always continues
+  in its own VS Code panel, so there is never a second copy of it.
+
 ## 0.1.3 (2026-10-28)
 
 - Fixed: after Auto moved a chat that had background work and resumed it on the new account,

@@ -15,17 +15,13 @@ final class SessionScannerTests: XCTestCase {
         return b
     }
 
-    func testParseKeepsOnlyKnownVariables() {
+    func testParseKeepsOnlyTwoVariables() {
         let buf = procArgs(
             exec: "/x/claude", argv: ["/x/claude", "--resume", "a b"],
-            env: [
-                "HOME=/Users/example", "CLAUDE_CONFIG_DIR=/p/work", "SECRET_TOKEN=abc", "SPILLOVER_PROFILE=work",
-                "SPILLOVER_RESUMED_RUN=1",
-            ])
+            env: ["HOME=/Users/example", "CLAUDE_CONFIG_DIR=/p/work", "SECRET_TOKEN=abc", "SPILLOVER_PROFILE=work"])
         let parsed = SessionScanner.parseProcArgs(buf)
         XCTAssertEqual(parsed.argv, ["/x/claude", "--resume", "a b"])
-        XCTAssertEqual(
-            parsed.env, ["CLAUDE_CONFIG_DIR": "/p/work", "SPILLOVER_PROFILE": "work", "SPILLOVER_RESUMED_RUN": "1"])
+        XCTAssertEqual(parsed.env, ["CLAUDE_CONFIG_DIR": "/p/work", "SPILLOVER_PROFILE": "work"])
     }
 
     func testParseHandlesTruncatedBuffers() {

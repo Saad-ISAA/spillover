@@ -89,8 +89,8 @@ by message id.
 
 `Sessions/SessionScanner.swift` lists the user's own `claude` processes with `proc_listallpids`,
 `proc_pidpath`, `sysctl(KERN_PROCARGS2)` and `proc_pidinfo(PROC_PIDVNODEPATHINFO)`. While parsing a
-process's arguments it keeps exactly three environment variables (`CLAUDE_CONFIG_DIR`,
-`SPILLOVER_PROFILE`, `SPILLOVER_RESUMED_RUN`) and the conversation id (`--resume`), and discards the rest. Each session is
+process's arguments it keeps exactly two environment variables (`CLAUDE_CONFIG_DIR`,
+`SPILLOVER_PROFILE`) and the conversation id (`--resume`), and discards the rest. Each session is
 compared with today's resolution of its folder to flag sessions that need moving after a
 reassignment (in Auto folders, only when their account ran low).
 
@@ -122,18 +122,15 @@ process has ended, the panel keeps the conversation and its next message starts 
 2. waits until the chat is between turns and has no background work (`ConversationActivity`: the
    last conversational record is a finished assistant reply, the file is quiet, and every
    background subagent or background command the process started has reported back with a task
-   notification; they run inside the chat's process and would end with it). A move the user asks
-   for waits for that background work. An automatic move (the account is full) does not: it ends
-   the chat at the turn boundary and, when background work was running, resumes the chat on the
-   new account (`ChatResumer`: `claude --resume <id> -p "The account switched, please resume all
-   work."` through the launcher, with the chat's own permission and model flags), so that work
-   restarts there; a headless run stays alive until its own background work is done. That run is
-   marked `SPILLOVER_RESUMED_RUN=1`. While it runs, the launcher refuses to start the same
-   conversation again (the editor would otherwise start a second process when the user types in
-   the chat, and both would run the same background tasks in the same files); the panel shows
-   why. Sessions lists the run with Take over, which stops it so the chat continues in the
-   editor; Auto never moves it. A waiting
-   automatic move is dropped when the chat's account has room again;
+   notification; they run inside the chat's process and would end with it). Every move waits for
+   that background work. An automatic move stops waiting only when the account is about to stop
+   working (`AutoPolicy.isNearlyOut`: 98% of a limit, or forecast to reach one within 10
+   minutes), when the limit would stop that work anyway; the user is then told the work stopped,
+   and the chat's next message continues on the new account. Nothing is resumed out of sight: the
+   extension cannot be asked to send a message into a chat (its `open?prompt=` link only fills
+   the input box), and a chat run from outside the editor would be a second process on the same
+   conversation as soon as the user types in its panel. A waiting automatic move is dropped when
+   the chat's account has room again;
 3. ends that one process (`SessionControl.end`, which re-checks the pid is still the same chat).
    It sends SIGINT, which a chat between turns treats as a clean exit, so the editor shows no
    error; SIGTERM follows only if the process is still running five seconds later;

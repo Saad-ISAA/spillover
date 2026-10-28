@@ -9,9 +9,9 @@ struct ChatMove: Equatable {
         case waiting
         case switching
         case done
-        /// Moved with background work running: that work stopped with the old process, and the
-        /// chat was resumed on the new account to pick it up again.
-        case resumed
+        /// Moved because its account was about to stop working, while background work ran: that
+        /// work stopped with the old process. The chat's next message continues on the new account.
+        case workStopped
         /// The chat was closed before it could be ended; it continues on the new account the
         /// next time it is opened.
         case closed
@@ -101,7 +101,7 @@ extension AppModel {
     /// Auto folders: move open chats off an account that ran low, at their next idle moment.
     func autoMoveChatsIfNeeded() {
         guard autoPolicy.moveOpenChats else { return }
-        for a in sessions where !a.session.resumedBySpillover {
+        for a in sessions {
             guard case .stale(let expected) = a.state, let cwd = a.session.cwd, a.session.editor != nil,
                 let id = a.session.conversationId, moves[id]?.blocksAutomaticRetry(now: now) != true,
                 case .routed(_, let route) = resolution(for: cwd), route.profileId == Profile.autoID,
@@ -134,29 +134,6 @@ extension AppModel {
     /// Accounts in Auto's order of preference, for display.
     var autoOrder: [Profile] { autoPolicy.ordered(profiles) }
 
-    /// Stop a chat Spillover resumed in the background, so it can continue in the editor. Its
-    /// background tasks stop with it; the chat can be asked to pick them up again there.
-    func takeOver(_ a: SessionAssessment) {
-        guard a.session.resumedBySpillover else { return }
-        do {
-            try SessionControl.end(a.session)
-            let name = a.session.cwd.map(Fmt.folderName) ?? "That"
-            show(.info, "\(name) chat stopped in the background. Continue it in VS Code; its background work stopped too, so ask it to pick that up again.")
-        } catch {
-            show(.error, error.localizedDescription)
-        }
-        refreshSessions()
-    }
-
-    /// Tells when a chat resumed in the background has finished and can be opened in the editor.
-    func noteFinishedResumedRuns(before: [SessionAssessment], now: [SessionAssessment]) {
-        let running = Set(now.map(\.session.pid))
-        for a in before where a.session.resumedBySpillover && !running.contains(a.session.pid) {
-            let name = a.session.cwd.map(Fmt.folderName) ?? "A"
-            show(.success, "\(name) chat finished its background work. Continue it in VS Code: its next message picks up where it left off.")
-        }
-    }
-
     func move(for a: SessionAssessment) -> ChatMove? {
         a.session.conversationId.flatMap { moves[$0] }
     }
@@ -178,7 +155,7 @@ extension AppModel {
     }
 
     private func startMove(_ a: SessionAssessment, automatic: Bool) {
-        guard !DemoSessions.isActive(env), !a.session.resumedBySpillover else { return }
+        guard !DemoSessions.isActive(env) else { return }
         guard case .stale(let expectedID) = a.state, let target = profile(id: expectedID) else { return }
         guard let cwd = a.session.cwd, let editor = a.session.editor else {
             if !automatic {
@@ -215,9 +192,9 @@ extension AppModel {
                 // Wait for a turn boundary, copy, and check again right before ending the process:
                 // a prompt sent during the copy would otherwise be cut off.
                 // Background tasks (subagents, background commands) live in the chat's process and
-                // stop with it. A manual move waits for them. An automatic move (the account is
-                // full) does not: it ends the chat at the turn boundary and resumes it on the new
-                // account, which restarts that work there.
+                // stop with it, so a move waits for them. An automatic move stops waiting only when
+                // the account is about to stop working (the limit would stop that work anyway); the
+                // chat then continues on the new account with its next message.
                 var ready = false
                 var hadBackgroundWork = false
                 let deadline = Date().addingTimeInterval(automatic ? 6 * 3600 : 15 * 60)
@@ -230,7 +207,11 @@ extension AppModel {
                     guard let transcript = conversations.transcript(id: id, cwd: cwd, in: source) else {
                         throw MoveFailure.transcriptMissing
                     }
-                    let waitsForTasks = !automatic
+                    var nearlyOut = false
+                    if automatic {
+                        nearlyOut = await MainActor.run { self.autoPolicy.isNearlyOut(self.snapshots[source.id], now: Date()) }
+                    }
+                    let waitsForTasks = !nearlyOut
                     if Self.isReady(transcript, since: session.startedAt, acceptStalled: !automatic, waitsForTasks: waitsForTasks) {
                         try conversations.ensure(id: id, cwd: cwd, target: target, among: profiles)
                         if Self.isReady(transcript, since: session.startedAt, acceptStalled: !automatic, waitsForTasks: waitsForTasks) {
@@ -267,8 +248,7 @@ extension AppModel {
                 // folder's account. (Opening the folder or a session link could open a second
                 // window or a second copy of the chat in whichever window is in front.)
                 if hadBackgroundWork {
-                    try ChatResumer(env: env).resume(conversationId: id, folder: cwd, flags: session.resumeFlags)
-                    await MainActor.run { self.finishMove(id, .resumed, target: target, folder: cwd) }
+                    await MainActor.run { self.finishMove(id, .workStopped, target: target, folder: cwd) }
                     return
                 }
                 let outcome = await Self.confirmNotWrongAccount(id: id, on: target, env: env)
@@ -290,8 +270,8 @@ extension AppModel {
             // The extension asks which account it is on once per window, so its Account panel
             // keeps the old email until the window reloads; the chat itself is already moved.
             show(.success, "\(name) chat moved to \(target.displayName) with its history: its next message runs there. Claude's Account panel shows the new email after you reload the window.")
-        case .resumed:
-            show(.success, "\(name) chat moved to \(target.displayName). Its background work had to stop, so Spillover resumed it there (\"\(ChatResumer.message)\"). It keeps working in the background, listed under Sessions; the chat opens again in VS Code when it is done, or choose Take over there.")
+        case .workStopped:
+            show(.info, "\(name) chat moved to \(target.displayName): its account was about to run out, so its background work stopped. Send a message in that chat (for example \"resume your work\") to continue it on \(target.displayName).")
         case .closed:
             show(.info, "The \(name) chat was closed. It continues on \(target.displayName), with its history, when you reopen it.")
         case .failed(let why):
