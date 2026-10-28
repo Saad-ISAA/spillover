@@ -23,14 +23,29 @@ public struct LaunchPlan: Equatable, Sendable {
     public var executable: String
     public var args: [String]
     public var environment: [String: String]
-    /// Arguments Spillover adds in front of Claude's own (which are passed on unchanged).
+    /// Arguments Spillover adds to Claude's own (which are passed on unchanged).
     public var extraArgs: [String] = []
+    /// Where in `args` the extra arguments go: after Claude's own options, never in front of
+    /// them. Editors pass the Claude binary as the first argument, and an option that takes
+    /// several values would read it as one of them.
+    public var extraArgsIndex: Int
 
-    public init(executable: String, args: [String], environment: [String: String], extraArgs: [String] = []) {
+    public init(
+        executable: String, args: [String], environment: [String: String], extraArgs: [String] = [],
+        extraArgsIndex: Int? = nil
+    ) {
         self.executable = executable
         self.args = args
         self.environment = environment
         self.extraArgs = extraArgs
+        self.extraArgsIndex = extraArgsIndex ?? args.count
+    }
+
+    /// The argument list Claude receives.
+    public var fullArgs: [String] {
+        var all = args
+        all.insert(contentsOf: extraArgs, at: min(max(extraArgsIndex, 0), args.count))
+        return all
     }
 }
 
@@ -104,17 +119,30 @@ public struct LaunchPlanner {
         }
         // An account that shares MCP servers gets them for chats (not for commands such as
         // `claude auth status`), unless the launch already chooses its MCP configuration.
+        // One `--opt=value` token at the end (before a `--`), so it can neither take nor give up
+        // a neighbouring argument.
         var extraArgs: [String] = []
-        if let mcp = ProfileSharing(env: env).sharedMcpConfig(for: target), SessionScanner.isChat(argv: request.args),
+        if let mcp = ProfileSharing(env: env).sharedMcpConfig(for: target),
+            SessionScanner.isChat(argv: Self.claudeArgs(request)),
             !request.args.contains(where: { $0.hasPrefix("--mcp-config") || $0 == "--strict-mcp-config" })
         {
-            extraArgs = ["--mcp-config", mcp.path]
+            extraArgs = ["--mcp-config=\(mcp.path)"]
             outcome += "+mcp"
         }
         log.append(mode: request.mode, cwd: request.cwd, profile: profileID, outcome: outcome)
         return .exec(
-            LaunchPlan(executable: executable, args: request.args, environment: environment, extraArgs: extraArgs),
+            LaunchPlan(
+                executable: executable, args: request.args, environment: environment, extraArgs: extraArgs,
+                extraArgsIndex: request.args.firstIndex(of: "--") ?? request.args.count),
             resolution)
+    }
+
+    /// Claude's arguments without the Claude binary that editors pass first to the wrapper.
+    static func claudeArgs(_ request: LaunchRequest) -> [String] {
+        guard request.mode == .editorWrapper, let first = request.args.first, first.hasPrefix("/"),
+            (first as NSString).lastPathComponent.hasPrefix("claude")
+        else { return request.args }
+        return Array(request.args.dropFirst())
     }
 
     /// A resumed conversation must exist in the account it starts on: copy the newest copy there

@@ -63,12 +63,21 @@ final class LaunchPlannerTests: XCTestCase {
         XCTAssertEqual(
             try FileManager.default.destinationOfSymbolicLink(atPath: link.path), box.home.appendingPathComponent(".claude.json").path)
 
-        // Chats get it; Claude's own arguments are left as they were.
-        guard case .exec(let plan, _) = LaunchPlanner(env: env).plan(request(["--resume=abc"])) else { return XCTFail() }
-        XCTAssertEqual(plan.extraArgs, ["--mcp-config", link.path])
-        XCTAssertEqual(plan.args, ["--resume=abc"])
+        // Chats get it as one token after Claude's own arguments, which are left as they were.
+        // Editors pass the Claude binary first; nothing may come before it, or an option that
+        // takes several values reads the binary as one of them.
+        let binary = "/Users/example/.vscode/extensions/anthropic.claude-code-2.1.312-darwin-arm64/resources/native-binary/claude"
+        let chat = [binary, "--output-format", "stream-json", "--resume=abc"]
+        guard case .exec(let plan, _) = LaunchPlanner(env: env).plan(request(chat)) else { return XCTFail() }
+        XCTAssertEqual(plan.extraArgs, ["--mcp-config=\(link.path)"])
+        XCTAssertEqual(plan.args, chat)
+        XCTAssertEqual(plan.fullArgs, chat + ["--mcp-config=\(link.path)"])
+        // A `--` keeps everything after it as text, so the flag goes in front of it.
+        guard case .exec(let print, _) = LaunchPlanner(env: env).plan(request(["-p", "--", "--hi"])) else { return XCTFail() }
+        XCTAssertEqual(print.fullArgs, ["-p", "--mcp-config=\(link.path)", "--", "--hi"])
         // Commands and launches that choose their own MCP configuration do not.
         XCTAssertEqual(extras(["auth", "status", "--json"]), [])
+        XCTAssertEqual(extras([binary, "auth", "status", "--json"]), [])
         XCTAssertEqual(extras(["--strict-mcp-config", "--mcp-config", "/x.json"]), [])
         // The normal login itself never gets the flag.
         XCTAssertNil(sharing.sharedMcpConfig(for: .builtInDefault()))
