@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.2 (unreleased)
+## 0.1.2 (2026-10-28)
 
 - Fixed: with MCP servers shared, every VS Code chat on that account stopped at once with "Claude
   Code process exited with code 1". The editor passes the Claude binary as the first argument, and
