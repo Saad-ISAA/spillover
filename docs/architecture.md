@@ -113,21 +113,31 @@ tmp/                  short-lived Terminal scripts for login
 
 ## Moving a chat to another account
 
-The VS Code extension starts every chat as `claude --resume=<conversation id>`, and reopens a
-conversation through `vscode://anthropic.claude-code/open?session=<id>`. Conversation history lives
-in each account's own config folder. A move therefore:
+The VS Code extension starts every chat as `claude --resume=<conversation id>`; when a chat's
+process has ended, the panel keeps the conversation and its next message starts it again with
+`--resume`. Conversation history lives in each account's own config folder. A move therefore:
 
 1. copies the conversation's transcript, its companion folder and its file checkpoints into the
    target account (`ConversationStore.ensure`, newest copy wins, byte for byte);
-2. waits until the chat is between turns (`ConversationActivity`: the last conversational record is
-   a finished assistant reply and the file is quiet; automatic moves accept nothing less);
+2. waits until the chat is between turns and has no background work (`ConversationActivity`: the
+   last conversational record is a finished assistant reply, the file is quiet, and every
+   background subagent or background command the process started has reported back with a task
+   notification; they run inside the chat's process and would end with it). Automatic moves accept
+   nothing less and keep waiting;
 3. ends that one process (`SessionControl.end`, which re-checks the pid is still the same chat).
    It sends SIGINT, which a chat between turns treats as a clean exit, so the editor shows no
    error; SIGTERM follows only if the process is still running five seconds later;
-4. focuses the chat's window and opens the reopen link. The extension shows the conversation at
-   once and starts its process when the next message is sent, through the launcher, which routes
-   it to the folder's (new) account and copies the transcript again if it changed (the ended
-   process appends a final bookkeeping record on exit).
+4. opens nothing in the editor. The panel keeps showing the conversation, and its next message
+   starts the process through the launcher, which routes it to the folder's (new) account and
+   copies the transcript again if it changed (the ended process appends a final bookkeeping
+   record on exit). Opening the folder or a session link is avoided on purpose: VS Code can open a
+   second window for a folder that a workspace already holds, and the link goes to whichever
+   window is in front.
+
+Auto folders keep one account until it is full (`auto-choices.json`, per assigned folder), so a
+window, its chats and the extension's own account check agree and do not switch back and forth.
+Open chats move only when their account reaches the threshold; the run-out forecast only steers
+which account is picked next.
 
 The launcher does step 1 on every resumed launch, so reloading a window after reassigning its
 folder also moves its chats with their history. No login data is read, copied or changed.
@@ -138,12 +148,12 @@ folder also moves its chats with their history. No login data is read, copied or
 | --- | --- |
 | Claude extension updated, window not reloaded | The old extension keeps running in that window. The launcher picks the Claude binary of the calling extension: the editor comes from its parent process (the extension host), the version from `CLAUDE_AGENT_SDK_VERSION`, whose last number matches the extension's (SDK 0.3.310 ↔ 2.1.310). Without it, the newest version the editor has not listed in `.obsolete` wins. |
 | Claude extension updated, window reloaded | Chats restart with `--resume`; the launcher routes them by folder and brings their history along. Health re-checks the extension's contract. |
-| Extension changes what Spillover relies on | Health reports it: a missing wrapper setting (routing stops), or no reopen link (open chats can no longer be moved live; reloading the window still moves them with their history). Live moves are disabled for that editor instead of failing. |
+| Extension changes what Spillover relies on | Health reports it, for example a missing wrapper setting (routing stops). Reloading the window always moves chats with their history. |
 | VS Code (or Cursor, ...) updated or restarted | The user setting persists; every chat restarts through the launcher on its folder's account, with history. |
 | Window closed while a move waits | The chat's process is gone; the move ends as "closed" and the chat continues on the new account, with its history, whenever it is reopened. |
 | Window closed and reopened later | Same as reload: resumed through the launcher, on the folder's current account. |
-| Several windows on one folder | All of the folder's chats move; the reopen link goes to the window brought forward for that folder. |
+| Several windows on one folder | All of the folder's chats move; each continues in its own panel with its next message. |
 | The app is not running | Routing, Auto at chat start and history handoff all happen in the launcher; only live moves and notifications need the app. |
-| Editor not connected | Live moves are refused with a pointer to Setup (a reopened chat would not change account). |
+| Editor not connected | Live moves are refused with a pointer to Setup (a restarted chat would not change account). |
 | Terminal chats | Not moved automatically; they switch the next time `claude` starts in that folder. |
 | Remote windows (SSH, containers) | Not supported: Claude runs on the remote machine, outside Spillover's reach. |

@@ -14,7 +14,7 @@ struct SessionsView: View {
             let stale = model.staleSessions.count
             if stale > 0 {
                 Notice(icon: "arrow.triangle.2.circlepath", tone: .warning,
-                       text: "\(Fmt.plural(stale, "session")) \(stale == 1 ? "is" : "are") still on an old account. Their folder now uses another account. Move them here: each one waits for its current reply, then reopens on the new account with its history.")
+                       text: "\(Fmt.plural(stale, "session")) \(stale == 1 ? "is" : "are") still on an old account. Their folder now uses another account. Move them here: each one waits for its current reply and background tasks, then continues on the new account with its history.")
             }
 
             byAccount
@@ -117,7 +117,7 @@ private struct SessionRow: View {
             } else if assessment.session.editor != nil, assessment.session.conversationId != nil {
                 Button("Move to \(name)") { model.restartOnAssignedAccount(assessment) }
                     .buttonStyle(QuietButtonStyle(tone: .warning))
-                    .help("Waits for the current reply to finish, then reopens this chat on \(name) with its history.")
+                    .help("Waits for the current reply and any background tasks to finish, then this chat continues on \(name) with its history.")
             } else {
                 Pill(text: "Restart for \(name)", tone: .warning)
                     .help("A terminal chat: start it again (claude -r) to switch.")

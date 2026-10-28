@@ -95,7 +95,7 @@ struct MenuPopover: View {
                 if stale > 0 {
                     // Held until the sessions restart: a changed assignment is not live in them yet.
                     Notice(icon: "arrow.triangle.2.circlepath", tone: .warning,
-                           text: "\(Fmt.plural(stale, "chat")) still on its old account. Move it, and it reopens on the new one with its history.") {
+                           text: "\(Fmt.plural(stale, "chat")) still on its old account. Move it, and it continues on the new one with its history.") {
                         Button("Move") { open(.sessions) }.buttonStyle(LinkButtonStyle())
                     }
                 }

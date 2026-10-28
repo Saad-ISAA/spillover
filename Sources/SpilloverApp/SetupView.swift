@@ -40,7 +40,7 @@ struct SetupView: View {
 
             settingRow(
                 "Auto",
-                "Folders set to Auto start new chats on the first account below the threshold. Open chats move when their account runs low, after their current reply, with their history."
+                "Folders set to Auto stay on one account until it reaches the threshold, then switch to the next account with room. Open chats move after their current reply and once their background tasks finish, with their history."
             ) {
                 AutoSettings()
             }
@@ -177,8 +177,8 @@ private struct EditorRow: View {
                 Text("Claude \(c.extensionVersion ?? "") no longer offers the wrapper setting: routing stops")
                     .font(TypeScale.meta).foregroundStyle(Ink.negative)
             default:
-                Text("Claude \(c.extensionVersion ?? "") · " + (c.reopensChats ? "open chats can move" : "open chats move on window reload"))
-                    .font(TypeScale.meta).foregroundStyle(c.reopensChats ? Ink.faint : Ink.warning)
+                Text("Claude \(c.extensionVersion ?? "") · open chats can move")
+                    .font(TypeScale.meta).foregroundStyle(Ink.faint)
             }
         }
     }
@@ -246,7 +246,7 @@ private struct AutoSettings: View {
                     get: { Int(model.autoPolicy.threshold) },
                     set: { v in model.updateAutoPolicy { $0.threshold = Double(v) } }))
         }
-        Text("Also when its limit is forecast to run out within \(Int(model.autoPolicy.runOutMinutes)) minutes.")
+        Text("When picking the next account, Auto also skips one forecast to run out within \(Int(model.autoPolicy.runOutMinutes)) minutes.")
             .font(TypeScale.meta).foregroundStyle(Ink.faint)
         HStack {
             Text("Move open chats automatically").font(TypeScale.body).foregroundStyle(Ink.text)
@@ -256,7 +256,7 @@ private struct AutoSettings: View {
                 set: { v in model.updateAutoPolicy { $0.moveOpenChats = v } }))
             .toggleStyle(.switch).controlSize(.small).labelsHidden()
         }
-        Text("The first time a chat is reopened, VS Code asks whether Claude Code may open the link. Tick “Do not ask me again” so later moves need no click.")
+        Text("A moved chat stays in its panel; its next message runs on the new account.")
             .font(TypeScale.meta).foregroundStyle(Ink.faint)
             .fixedSize(horizontal: false, vertical: true)
     }

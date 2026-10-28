@@ -2,11 +2,12 @@ import Foundation
 
 /// How folders assigned to **Auto** pick an account.
 ///
-/// When Claude starts in an Auto folder, the first account in `order` that has room is used; an
-/// account has room while its fullest limit is under `threshold` percent and no window is
-/// forecast to run out within `runOutMinutes`. When none has room, the least used one is taken
-/// (work continues rather than being refused). Open chats on an account that loses its room move
-/// at their next idle moment when `moveOpenChats` is on.
+/// An Auto folder keeps the account it is on until that account is full (its fullest limit at
+/// `threshold` percent), so its window does not switch accounts back and forth. When it needs a
+/// new one, the first account in `order` with room is used; an account has room while it is not
+/// full and no window is forecast to run out within `runOutMinutes`. When none has room, the
+/// least used one is taken (work continues rather than being refused). Open chats move only when
+/// their account is full, at their next idle moment, when `moveOpenChats` is on.
 public struct AutoPolicy: Codable, Equatable, Sendable {
     public var version = 1
     /// Account ids in order of preference. Empty means every account, in registry order.
@@ -66,7 +67,14 @@ public struct AutoPolicy: Codable, Equatable, Sendable {
         return profiles.sorted { (rank[$0.id] ?? Int.max) < (rank[$1.id] ?? Int.max) }
     }
 
-    /// True when the account should not take new work (or keep open chats) under this policy.
+    /// True when the account has reached the threshold on a limit: Auto leaves it, and open chats
+    /// on it move.
+    public func isFull(_ snapshot: UsageSnapshot?, now: Date = Date()) -> Bool {
+        guard let snapshot else { return false }
+        return snapshot.peakPercentage(at: now) >= threshold
+    }
+
+    /// True when the account should not be picked for new work: full, or forecast to run out soon.
     public func isOutOfRoom(_ snapshot: UsageSnapshot?, now: Date = Date()) -> Bool {
         guard let snapshot else { return false }
         if snapshot.peakPercentage(at: now) >= threshold { return true }
@@ -80,19 +88,25 @@ public struct AutoPolicy: Codable, Equatable, Sendable {
         return false
     }
 
-    /// The account Auto uses right now. `preferring` (the account that already holds a resumed
-    /// conversation) wins while it still has room, so a chat does not hop back and forth. Nil
-    /// only when no account is usable.
+    /// The account Auto uses right now. `current` (the folder's account so far) is kept until it is
+    /// full; then `preferring` (the account that already holds a resumed conversation) wins while
+    /// it has room, so neither a window nor a chat hops back and forth. Nil only when no account
+    /// is usable.
     public func choose(
-        profiles: [Profile], snapshots: [String: UsageSnapshot], now: Date = Date(), preferring: String? = nil
+        profiles: [Profile], snapshots: [String: UsageSnapshot], now: Date = Date(), preferring: String? = nil,
+        current: String? = nil
     ) -> Profile? {
         let candidates = candidates(from: profiles)
+        if let current, let p = candidates.first(where: { $0.id == current }), !isFull(snapshots[p.id], now: now) {
+            return p
+        }
         if let preferring, let p = candidates.first(where: { $0.id == preferring }),
             !isOutOfRoom(snapshots[p.id], now: now)
         {
             return p
         }
         if let roomy = candidates.first(where: { !isOutOfRoom(snapshots[$0.id], now: now) }) { return roomy }
+        if let notFull = candidates.first(where: { !isFull(snapshots[$0.id], now: now) }) { return notFull }
         return candidates.min {
             (snapshots[$0.id]?.peakPercentage(at: now) ?? 0) < (snapshots[$1.id]?.peakPercentage(at: now) ?? 0)
         }
@@ -142,5 +156,48 @@ public struct AutoPolicyStore {
         try SafeFS.withLock(root: env.paths.root) {
             try SafeFS.writeAtomic(try encoder.encode(policy), to: env.paths.autoPolicyFile)
         }
+    }
+}
+
+/// Which account each Auto folder is on, so every launch in the folder (a new chat, a resumed one,
+/// the editor's own account check) agrees until that account is full. Advisory: an unreadable or
+/// untrusted file is ignored and rebuilt, never a reason to refuse a launch.
+public struct AutoChoices {
+    private struct File: Codable {
+        var version = 1
+        /// Assigned folder (as in routes) -> profile id.
+        var folders: [String: String] = [:]
+    }
+
+    private let env: SBEnvironment
+
+    public init(env: SBEnvironment) {
+        self.env = env
+    }
+
+    public func current(folder: String) -> String? {
+        load().folders[folder]
+    }
+
+    /// Records the folder's account when it changed. Failures are ignored (the choice is redone).
+    public func record(folder: String, profileId: String) {
+        guard current(folder: folder) != profileId else { return }
+        try? SafeFS.ensureDir(env.paths.root)
+        try? SafeFS.withLock(root: env.paths.root) {
+            var file = load()
+            file.folders[folder] = profileId
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try SafeFS.writeAtomic(try encoder.encode(file), to: env.paths.autoChoicesFile)
+        }
+    }
+
+    private func load() -> File {
+        let url = env.paths.autoChoicesFile
+        guard FileManager.default.fileExists(atPath: url.path), SafeFS.trustProblem(url, name: "auto-choices.json") == nil,
+            let data = try? Data(contentsOf: url), let file = try? JSONDecoder().decode(File.self, from: data),
+            file.version == 1
+        else { return File() }
+        return file
     }
 }

@@ -110,9 +110,9 @@ public struct SessionScanner {
             case .unrouted:
                 expected = Profile.defaultID
             case .routed(let p, let route):
-                // Auto folders: any account with room is right; only one that ran low is behind.
+                // Auto folders: a chat stays where it is until its account is full.
                 if route.profileId == Profile.autoID, let actual,
-                    !policy.isOutOfRoom(usage.load(profileId: actual))
+                    !policy.isFull(usage.load(profileId: actual))
                 {
                     return SessionAssessment(session: s, actualProfileId: actual, state: .matches)
                 }

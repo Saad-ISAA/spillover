@@ -69,7 +69,7 @@ public struct Resolver {
         let profile: Profile
         do {
             if route.profileId == Profile.autoID {
-                switch chooseAuto(preferring: preferring) {
+                switch chooseAuto(folder: route.folder, preferring: preferring) {
                 case .success(let p): profile = p
                 case .failure(let refusal): return .refused(refusal)
                 }
@@ -104,7 +104,7 @@ public struct Resolver {
     }
 
     /// Auto folders: the policy picks among the registered accounts using their latest limits.
-    private func chooseAuto(preferring: String?) -> Result<Profile, Refusal> {
+    private func chooseAuto(folder: String, preferring: String?) -> Result<Profile, Refusal> {
         let policy: AutoPolicy
         switch AutoPolicyStore(env: env).load() {
         case .loaded(let p): policy = p
@@ -120,9 +120,14 @@ public struct Resolver {
         let store = UsageStore(env: env)
         var snapshots: [String: UsageSnapshot] = [:]
         for p in profiles { snapshots[p.id] = store.load(profileId: p.id) }
-        guard let chosen = policy.choose(profiles: profiles, snapshots: snapshots, preferring: preferring) else {
+        let choices = AutoChoices(env: env)
+        guard
+            let chosen = policy.choose(
+                profiles: profiles, snapshots: snapshots, preferring: preferring, current: choices.current(folder: folder))
+        else {
             return .failure(Refusal(code: .noAccounts, message: "No usable account for Auto (none logged in?). Run `spillover doctor`."))
         }
+        choices.record(folder: folder, profileId: chosen.id)
         return .success(chosen)
     }
 }

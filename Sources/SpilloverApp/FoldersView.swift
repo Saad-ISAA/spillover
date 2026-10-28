@@ -64,7 +64,7 @@ struct FoldersView: View {
                 }
             }
 
-            Text("Switching a folder also moves the chats open in it: each waits for its current reply, then reopens on the new account with its history.")
+            Text("Switching a folder also moves the chats open in it: each waits for its current reply and background tasks, then continues on the new account with its history.")
                 .font(TypeScale.meta)
                 .foregroundStyle(Ink.faint)
         }

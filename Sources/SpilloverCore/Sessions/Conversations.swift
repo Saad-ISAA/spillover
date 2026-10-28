@@ -310,4 +310,59 @@ public enum ConversationActivity {
         guard let content = message?["content"] as? [[String: Any]] else { return [] }
         return Set(content.compactMap { $0["type"] as? String })
     }
+
+    /// Background tasks (subagents and shell commands started to run in the background) launched
+    /// since `since` that have not reported back yet. They live inside the chat's process, so a
+    /// chat with any of them is never ended, even when its last reply has finished. Tasks from
+    /// before `since` (an earlier process) ended with that process and are ignored.
+    public static func pendingBackgroundTasks(transcript: URL, since: Date?) -> Set<String> {
+        guard let handle = try? FileHandle(forReadingFrom: transcript) else { return [] }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        let window: UInt64 = 8 * 1024 * 1024
+        try? handle.seek(toOffset: size > window ? size - window : 0)
+        return pendingBackgroundTasks(tail: (try? handle.readToEnd()) ?? Data(), since: since)
+    }
+
+    /// Pure rule (tested). A launch is a tool result naming an async `agentId` or a
+    /// `backgroundTaskId`; a finish is a task notification for that id with a final status.
+    static func pendingBackgroundTasks(tail: Data, since: Date?) -> Set<String> {
+        var launched = Set<String>()
+        var finished = Set<String>()
+        let launchMarkers = [Data("\"agentId\"".utf8), Data("\"backgroundTaskId\"".utf8)]
+        let notice = Data("task-notification".utf8)
+        let stamp = ISO8601DateFormatter()
+        stamp.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        for line in tail.split(separator: 0x0A) {
+            let mayLaunch = launchMarkers.contains { line.range(of: $0) != nil }
+            let mayFinish = line.range(of: notice) != nil
+            guard mayLaunch || mayFinish,
+                let obj = try? JSONSerialization.jsonObject(with: line) as? [String: Any]
+            else { continue }
+            if mayLaunch, let result = obj["toolUseResult"] as? [String: Any] {
+                let id = (result["isAsync"] as? Bool == true ? result["agentId"] as? String : nil)
+                    ?? result["backgroundTaskId"] as? String
+                let at = (obj["timestamp"] as? String).flatMap(stamp.date(from:))
+                var current = true
+                if let since, let at { current = at >= since.addingTimeInterval(-2) }
+                if let id, current { launched.insert(id) }
+            }
+            if mayFinish, let text = String(data: line, encoding: .utf8) {
+                finished.formUnion(finishedTaskIDs(in: text))
+            }
+        }
+        return launched.subtracting(finished)
+    }
+
+    private static let finishedNotice = try! NSRegularExpression(
+        pattern: #"<task-id>([^<]+)</task-id>(?:(?!<task-notification>).)*?<status>(completed|failed|stopped|killed)</status>"#,
+        options: [.dotMatchesLineSeparators])
+
+    private static func finishedTaskIDs(in text: String) -> Set<String> {
+        let range = NSRange(text.startIndex..., in: text)
+        return Set(
+            finishedNotice.matches(in: text, range: range).compactMap { m in
+                Range(m.range(at: 1), in: text).map { String(text[$0]) }
+            })
+    }
 }

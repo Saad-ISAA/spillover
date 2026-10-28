@@ -59,6 +59,37 @@ final class ConversationTests: XCTestCase {
         XCTAssertNotNil(conversations.transcript(id: id, cwd: "/elsewhere", in: .builtInDefault()))
     }
 
+    func testBackgroundTasksKeepAChatBusy() {
+        let start = ISO8601DateFormatter().date(from: "2026-10-27T21:55:00Z")!
+        let agent = #"{"type":"user","timestamp":"2026-10-27T21:58:08.100Z","toolUseResult":{"isAsync":true,"status":"async_launched","agentId":"a08b632472fe3d6b1"}}"#
+        let shell = #"{"type":"user","timestamp":"2026-10-27T21:58:09.000Z","toolUseResult":{"stdout":"","backgroundTaskId":"bwpvyvdgf"}}"#
+        let older = #"{"type":"user","timestamp":"2026-10-27T20:00:00.000Z","toolUseResult":{"isAsync":true,"agentId":"aold"}}"#
+        let reply = #"{"type":"assistant","timestamp":"2026-10-27T21:58:13.000Z","message":{"stop_reason":"end_turn","content":[]}}"#
+        let lines = [older, agent, shell, reply].joined(separator: "\n")
+
+        // The reply has finished, but both tasks started by this process are still running.
+        XCTAssertEqual(
+            ConversationActivity.pendingBackgroundTasks(tail: Data(lines.utf8), since: start),
+            ["a08b632472fe3d6b1", "bwpvyvdgf"])
+
+        // Each task reports back with a task notification and a final status.
+        let agentDone = #"{"type":"queue-operation","operation":"enqueue","content":"<task-notification>\n<task-id>a08b632472fe3d6b1</task-id>\n<status>completed</status>\n</task-notification>"}"#
+        let shellRunning = #"{"type":"queue-operation","content":"<task-notification>\n<task-id>bwpvyvdgf</task-id>\n<status>running</status>\n</task-notification>"}"#
+        XCTAssertEqual(
+            ConversationActivity.pendingBackgroundTasks(
+                tail: Data([lines, agentDone, shellRunning].joined(separator: "\n").utf8), since: start),
+            ["bwpvyvdgf"])
+        let shellKilled = #"{"type":"user","message":{"content":"<task-notification><task-id>bwpvyvdgf</task-id><status>killed</status></task-notification>"}}"#
+        XCTAssertTrue(
+            ConversationActivity.pendingBackgroundTasks(
+                tail: Data([lines, agentDone, shellKilled].joined(separator: "\n").utf8), since: start
+            ).isEmpty)
+
+        // A synchronous subagent (not async) is not a background task.
+        let sync = #"{"type":"user","timestamp":"2026-10-27T21:59:00.000Z","toolUseResult":{"isAsync":false,"agentId":"async-no"}}"#
+        XCTAssertTrue(ConversationActivity.pendingBackgroundTasks(tail: Data(sync.utf8), since: start).isEmpty)
+    }
+
     func testActivityState() {
         let done = #"{"type":"assistant","message":{"stop_reason":"end_turn","content":[]}}"# + "\n" + #"{"type":"ai-title","title":"x"}"#
         let tool = #"{"type":"assistant","message":{"stop_reason":"tool_use"}}"#
@@ -193,6 +224,49 @@ final class AutoPolicyTests: XCTestCase {
         XCTAssertTrue(AutoPolicy().isOutOfRoom(s, now: now))
         XCTAssertFalse(AutoPolicy().isOutOfRoom(snapshot("a", five: 20), now: now))
         XCTAssertFalse(AutoPolicy().isOutOfRoom(nil, now: now))
+    }
+
+    func testAFolderKeepsItsAccountUntilItIsFull() throws {
+        let box = try Sandbox()
+        let a = Profile(id: "a", displayName: "A", configDir: try box.mkdir("a").path)
+        let b = Profile(id: "b", displayName: "B", configDir: try box.mkdir("b").path)
+        let policy = AutoPolicy(order: ["a", "b"])
+        // 78% and climbing fast enough to run out within 30 minutes: not full, so nothing moves.
+        let climbing = UsageSnapshot(profileId: "b", capturedAt: now, windows: [
+            .init(kind: .fiveHour, usedPercentage: 78, resetsAt: now.addingTimeInterval(3 * 3600 + 20 * 60))
+        ])
+        XCTAssertTrue(policy.isOutOfRoom(climbing, now: now))
+        XCTAssertFalse(policy.isFull(climbing, now: now))
+        XCTAssertEqual(policy.choose(profiles: [a, b], snapshots: ["b": climbing], now: now, current: "b")?.id, "b")
+        // Even though "a" comes first and has room again, the folder stays on "b"...
+        XCTAssertEqual(policy.choose(profiles: [a, b], snapshots: [:], now: now, current: "b")?.id, "b")
+        // ...until "b" is full.
+        XCTAssertEqual(
+            policy.choose(profiles: [a, b], snapshots: ["b": snapshot("b", five: 91)], now: now, current: "b")?.id, "a")
+    }
+
+    func testResolverRemembersEachAutoFoldersAccount() throws {
+        let box = try Sandbox()
+        let service = AppService(env: box.env)
+        let work = try service.profiles.create(displayName: "work")
+        let personal = try service.profiles.create(displayName: "personal")
+        let project = try box.mkdir("p")
+        try service.assign(folder: project.path, to: Profile.autoID)
+        try AutoPolicyStore(env: box.env).save(AutoPolicy(order: [work.id, personal.id]))
+        let usage = UsageStore(env: box.env)
+        func resolved() -> String? {
+            if case .routed(let p, _) = Resolver(env: box.env).resolve(cwd: project.path) { return p.id }
+            return nil
+        }
+
+        try usage.save(snapshot(work.id, five: 95).withCapture(Date()))
+        XCTAssertEqual(resolved(), personal.id)
+        // Work's session resets: the folder (its window, chats and account checks) stays put.
+        try usage.save(snapshot(work.id, five: 5).withCapture(Date()))
+        XCTAssertEqual(resolved(), personal.id)
+        // Personal fills up: now it moves on.
+        try usage.save(snapshot(personal.id, five: 92).withCapture(Date()))
+        XCTAssertEqual(resolved(), work.id)
     }
 
     func testResolverRoutesAutoFolders() throws {

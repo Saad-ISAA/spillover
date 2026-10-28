@@ -9,7 +9,7 @@ struct ChatMove: Equatable {
         case waiting
         case switching
         case done
-        /// The chat was closed before it could be reopened; it continues on the new account the
+        /// The chat was closed before it could be ended; it continues on the new account the
         /// next time it is opened.
         case closed
         case failed(String)
@@ -40,8 +40,8 @@ struct OpenWindow: Identifiable {
 }
 
 /// Moving chats between accounts. A move keeps the conversation: its transcript is copied to the
-/// new account, the chat's process is ended at a turn boundary, and the editor reopens the
-/// conversation, which the launcher now starts on the new account.
+/// new account and the chat's process is ended at a turn boundary with no background task
+/// running; the chat stays in its panel and its next message starts it on the new account.
 extension AppModel {
     /// Chats grouped by the folder that decides their account (the assigned folder, or the
     /// chat's own folder when nothing is assigned).
@@ -160,17 +160,15 @@ extension AppModel {
             }
             return
         }
-        // The extension's side of a move: chats resumed by id, and a link that reopens one.
-        guard let id = a.session.conversationId, let reopen = editor.claudeSessionURL(id),
-            contracts[editor]?.reopensChats != false
-        else {
+        // The extension resumes a chat by its id when its next message is sent.
+        guard let id = a.session.conversationId else {
             if !automatic {
-                show(.info, "This version of the Claude extension cannot reopen a chat for Spillover. Reload the \(Fmt.folderName(cwd)) window instead: its chats restart on the new account with their history.")
+                show(.info, "Reload the \(Fmt.folderName(cwd)) window instead: its chats restart on the new account with their history.")
             }
             return
         }
         if moves[id]?.inProgress == true { return }
-        // Without the launcher in the editor, a reopened chat would not change account.
+        // Without the launcher in the editor, a restarted chat would not change account.
         guard editorStatus[editor] == .installed else {
             if !automatic { show(.error, "Connect \(editor.displayName) under Setup first; until then its chats cannot change account.") }
             return
@@ -188,22 +186,24 @@ extension AppModel {
         Task.detached(priority: .userInitiated) {
             let conversations = ConversationStore(env: env)
             do {
-                // Wait for a turn boundary, copy, and check again right before ending the process:
-                // a prompt sent during the copy would otherwise be cut off.
+                // Wait for a turn boundary with no background task still running (subagents and
+                // background commands live in the chat's process and would die with it), copy,
+                // and check again right before ending the process: a prompt sent during the copy
+                // would otherwise be cut off. Automatic moves wait longer and never give up early.
                 var ready = false
-                let deadline = Date().addingTimeInterval(15 * 60)
+                let deadline = Date().addingTimeInterval(automatic ? 6 * 3600 : 15 * 60)
                 while Date() < deadline {
                     guard let transcript = conversations.transcript(id: id, cwd: cwd, in: source) else {
                         throw MoveFailure.transcriptMissing
                     }
-                    if Self.isReady(transcript, acceptStalled: !automatic) {
+                    if Self.isReady(transcript, since: session.startedAt, acceptStalled: !automatic) {
                         try conversations.ensure(id: id, cwd: cwd, target: target, among: profiles)
-                        if Self.isReady(transcript, acceptStalled: !automatic) {
+                        if Self.isReady(transcript, since: session.startedAt, acceptStalled: !automatic) {
                             ready = true
                             break
                         }
                     }
-                    try await Task.sleep(nanoseconds: 2_000_000_000)
+                    try await Task.sleep(nanoseconds: 5_000_000_000)
                 }
                 guard ready else { throw MoveFailure.stillBusy }
 
@@ -224,15 +224,11 @@ extension AppModel {
                         try? await Task.sleep(nanoseconds: 200_000_000)
                     }
                 }
-                await MainActor.run {
-                    // Bring the chat's window forward, then ask the extension to reopen the chat.
-                    try? self.service.open(folder: cwd, in: editor)
-                }
-                try? await Task.sleep(nanoseconds: 1_500_000_000)
-                await MainActor.run { _ = NSWorkspace.shared.open(reopen) }
-
-                // Report a reopen on the wrong account; anything else is a finished move.
-                let outcome = await Self.confirmReopened(id: id, on: target, env: env)
+                // Nothing is opened in the editor: a chat ended this way keeps its conversation in
+                // its panel, and its next message starts it again through the launcher on the
+                // folder's account. (Opening the folder or a session link could open a second
+                // window or a second copy of the chat in whichever window is in front.)
+                let outcome = await Self.confirmNotWrongAccount(id: id, on: target, env: env)
                 await MainActor.run { self.finishMove(id, outcome, target: target, folder: cwd) }
             } catch {
                 await MainActor.run {
@@ -250,7 +246,7 @@ extension AppModel {
         case .done:
             // The extension asks which account it is on once per window, so its Account panel
             // keeps the old email until the window reloads; the chat itself is already moved.
-            show(.success, "\(name) chat moved to \(target.displayName) with its history. Its next message runs on \(target.displayName). Claude's Account panel shows the new email after you reload the window.")
+            show(.success, "\(name) chat moved to \(target.displayName) with its history: its next message runs there. Claude's Account panel shows the new email after you reload the window.")
         case .closed:
             show(.info, "The \(name) chat was closed. It continues on \(target.displayName), with its history, when you reopen it.")
         case .failed(let why):
@@ -261,7 +257,10 @@ extension AppModel {
         refreshSessions()
     }
 
-    nonisolated private static func isReady(_ transcript: URL, acceptStalled: Bool) -> Bool {
+    nonisolated private static func isReady(_ transcript: URL, since: Date?, acceptStalled: Bool) -> Bool {
+        guard ConversationActivity.pendingBackgroundTasks(transcript: transcript, since: since).isEmpty else {
+            return false
+        }
         switch ConversationActivity.state(transcript: transcript) {
         case .idle: return true
         case .stalled: return acceptStalled
@@ -269,17 +268,17 @@ extension AppModel {
         }
     }
 
-    /// The extension shows a reopened conversation at once but starts its process only when the
-    /// next message is sent, through the launcher, on the folder's account. So no process is the
-    /// usual outcome; a process that does start within 20 seconds must be on the target account.
-    nonisolated private static func confirmReopened(id: String, on target: Profile, env: SBEnvironment) async -> ChatMove.Phase {
+    /// The chat starts again only when its next message is sent, through the launcher, on the
+    /// folder's account. So no process is the usual outcome; a process for this chat that does
+    /// start within 20 seconds must be on the target account.
+    nonisolated private static func confirmNotWrongAccount(id: String, on target: Profile, env: SBEnvironment) async -> ChatMove.Phase {
         let profiles = (try? ProfileStore(env: env).all()) ?? []
         for _ in 0..<20 {
             try? await Task.sleep(nanoseconds: 1_000_000_000)
             guard let s = SessionScanner(env: env).scan().first(where: { $0.conversationId == id }) else { continue }
             let actual = SessionScanner.profileId(for: s, profiles: profiles, caseInsensitive: env.caseInsensitivePaths)
             if actual == target.id { return .done }
-            return .failed("it reopened on \(actual ?? "an unknown account") instead. Is the editor connected under Setup?")
+            return .failed("it restarted on \(actual ?? "an unknown account") instead. Is the editor connected under Setup?")
         }
         return .done
     }
@@ -300,7 +299,7 @@ enum MoveFailure: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .stillBusy:
-            return "the chat was still working after 15 minutes. It keeps its current account; try again when it is idle."
+            return "the chat (or a background task it started) was still working. It keeps its current account; try again when it is idle."
         case .transcriptMissing:
             return "its conversation file was not found, so it was left running on its current account."
         }
