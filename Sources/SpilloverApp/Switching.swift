@@ -9,6 +9,9 @@ struct ChatMove: Equatable {
         case waiting
         case switching
         case done
+        /// Moved with background work running: that work stopped with the old process, and the
+        /// chat was resumed on the new account to pick it up again.
+        case resumed
         /// The chat was closed before it could be ended; it continues on the new account the
         /// next time it is opened.
         case closed
@@ -186,19 +189,31 @@ extension AppModel {
         Task.detached(priority: .userInitiated) {
             let conversations = ConversationStore(env: env)
             do {
-                // Wait for a turn boundary with no background task still running (subagents and
-                // background commands live in the chat's process and would die with it), copy,
-                // and check again right before ending the process: a prompt sent during the copy
-                // would otherwise be cut off. Automatic moves wait longer and never give up early.
+                // Wait for a turn boundary, copy, and check again right before ending the process:
+                // a prompt sent during the copy would otherwise be cut off.
+                // Background tasks (subagents, background commands) live in the chat's process and
+                // stop with it. A manual move waits for them. An automatic move (the account is
+                // full) does not: it ends the chat at the turn boundary and resumes it on the new
+                // account, which restarts that work there.
                 var ready = false
+                var hadBackgroundWork = false
                 let deadline = Date().addingTimeInterval(automatic ? 6 * 3600 : 15 * 60)
                 while Date() < deadline {
+                    // An automatic move is dropped once the chat's account has room again.
+                    if automatic, !(await MainActor.run { self.isStillBehind(session.pid) }) {
+                        await MainActor.run { self.moves[id] = nil }
+                        return
+                    }
                     guard let transcript = conversations.transcript(id: id, cwd: cwd, in: source) else {
                         throw MoveFailure.transcriptMissing
                     }
-                    if Self.isReady(transcript, since: session.startedAt, acceptStalled: !automatic) {
+                    let waitsForTasks = !automatic
+                    if Self.isReady(transcript, since: session.startedAt, acceptStalled: !automatic, waitsForTasks: waitsForTasks) {
                         try conversations.ensure(id: id, cwd: cwd, target: target, among: profiles)
-                        if Self.isReady(transcript, since: session.startedAt, acceptStalled: !automatic) {
+                        if Self.isReady(transcript, since: session.startedAt, acceptStalled: !automatic, waitsForTasks: waitsForTasks) {
+                            hadBackgroundWork = !ConversationActivity.pendingBackgroundTasks(
+                                transcript: transcript, since: session.startedAt
+                            ).isEmpty
                             ready = true
                             break
                         }
@@ -228,6 +243,11 @@ extension AppModel {
                 // its panel, and its next message starts it again through the launcher on the
                 // folder's account. (Opening the folder or a session link could open a second
                 // window or a second copy of the chat in whichever window is in front.)
+                if hadBackgroundWork {
+                    try ChatResumer(env: env).resume(conversationId: id, folder: cwd, flags: session.resumeFlags)
+                    await MainActor.run { self.finishMove(id, .resumed, target: target, folder: cwd) }
+                    return
+                }
                 let outcome = await Self.confirmNotWrongAccount(id: id, on: target, env: env)
                 await MainActor.run { self.finishMove(id, outcome, target: target, folder: cwd) }
             } catch {
@@ -247,6 +267,8 @@ extension AppModel {
             // The extension asks which account it is on once per window, so its Account panel
             // keeps the old email until the window reloads; the chat itself is already moved.
             show(.success, "\(name) chat moved to \(target.displayName) with its history: its next message runs there. Claude's Account panel shows the new email after you reload the window.")
+        case .resumed:
+            show(.success, "\(name) chat moved to \(target.displayName). Its background work had to stop, so Spillover resumed it there (\"\(ChatResumer.message)\"). It works in the background until done; let it finish before typing in that chat.")
         case .closed:
             show(.info, "The \(name) chat was closed. It continues on \(target.displayName), with its history, when you reopen it.")
         case .failed(let why):
@@ -257,8 +279,10 @@ extension AppModel {
         refreshSessions()
     }
 
-    nonisolated private static func isReady(_ transcript: URL, since: Date?, acceptStalled: Bool) -> Bool {
-        guard ConversationActivity.pendingBackgroundTasks(transcript: transcript, since: since).isEmpty else {
+    nonisolated private static func isReady(
+        _ transcript: URL, since: Date?, acceptStalled: Bool, waitsForTasks: Bool
+    ) -> Bool {
+        if waitsForTasks, !ConversationActivity.pendingBackgroundTasks(transcript: transcript, since: since).isEmpty {
             return false
         }
         switch ConversationActivity.state(transcript: transcript) {
@@ -281,6 +305,13 @@ extension AppModel {
             return .failed("it restarted on \(actual ?? "an unknown account") instead. Is the editor connected under Setup?")
         }
         return .done
+    }
+
+    /// True while the chat with this pid still runs on an account its folder has moved away from.
+    private func isStillBehind(_ pid: Int32) -> Bool {
+        guard let a = sessions.first(where: { $0.session.pid == pid }) else { return true }
+        if case .stale = a.state { return true }
+        return false
     }
 
     private func isInside(_ cwd: String?, folder: String) -> Bool {

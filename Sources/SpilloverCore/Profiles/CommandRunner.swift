@@ -28,6 +28,10 @@ public protocol CommandRunning: Sendable {
 
     /// Run with the caller's terminal attached (interactive login). Returns the exit status.
     func runInteractive(_ executable: String, _ args: [String], env: [String: String]?) -> Int32
+
+    /// Start a process that keeps running on its own, with no input or output attached. Returns
+    /// its pid.
+    func spawnDetached(_ executable: String, _ args: [String], env: [String: String]?, directory: URL?) throws -> Int32
 }
 
 extension CommandRunning {
@@ -125,6 +129,37 @@ public struct SystemCommandRunner: CommandRunning {
             stdout: String(decoding: outBox.get(), as: UTF8.self),
             stderr: String(decoding: errBox.get(), as: UTF8.self),
             timedOut: timedOut)
+    }
+
+    /// Detached processes, kept until they exit so they are reaped.
+    private final class Detached: @unchecked Sendable {
+        static let shared = Detached()
+        let lock = NSLock()
+        var running: [Int32: Process] = [:]
+    }
+
+    public func spawnDetached(
+        _ executable: String, _ args: [String], env: [String: String]?, directory: URL?
+    ) throws -> Int32 {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = args
+        if let env { process.environment = env }
+        if let directory { process.currentDirectoryURL = directory }
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        let detached = Detached.shared
+        process.terminationHandler = { p in
+            detached.lock.lock()
+            detached.running.removeValue(forKey: p.processIdentifier)
+            detached.lock.unlock()
+        }
+        try process.run()
+        detached.lock.lock()
+        detached.running[process.processIdentifier] = process
+        detached.lock.unlock()
+        return process.processIdentifier
     }
 
     public func runInteractive(

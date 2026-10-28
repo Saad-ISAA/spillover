@@ -13,6 +13,9 @@ public struct RunningSession: Equatable, Sendable, Identifiable {
     public let startedAt: Date?
     /// The conversation this process continues (`--resume`), when it says.
     public let conversationId: String?
+    /// The chat's permission mode, model and similar flags (`resumeFlagNames`), so a resumed run
+    /// behaves like the chat did. Nothing else from the arguments is kept.
+    public let resumeFlags: [String]
 
     public var id: Int32 { pid }
 
@@ -21,7 +24,7 @@ public struct RunningSession: Equatable, Sendable, Identifiable {
 
     public init(
         pid: Int32, executable: String, cwd: String?, configDir: String?, spilloverProfile: String?,
-        startedAt: Date?, conversationId: String? = nil
+        startedAt: Date?, conversationId: String? = nil, resumeFlags: [String] = []
     ) {
         self.pid = pid
         self.executable = executable
@@ -30,6 +33,32 @@ public struct RunningSession: Equatable, Sendable, Identifiable {
         self.spilloverProfile = spilloverProfile
         self.startedAt = startedAt
         self.conversationId = conversationId
+        self.resumeFlags = resumeFlags
+    }
+
+    /// Flags carried over when Spillover resumes a chat (none of them holds a secret).
+    public static let resumeFlagNames: Set<String> = [
+        "--permission-mode", "--model", "--allow-dangerously-skip-permissions", "--dangerously-skip-permissions",
+        "--setting-sources", "--max-thinking-tokens",
+    ]
+
+    /// Keeps only `resumeFlagNames`, in `--flag=value` or `--flag value` form.
+    public static func resumeFlags(from argv: [String]) -> [String] {
+        var out: [String] = []
+        var i = 0
+        while i < argv.count {
+            let arg = argv[i]
+            let name = arg.split(separator: "=", maxSplits: 1).first.map(String.init) ?? arg
+            if resumeFlagNames.contains(name) {
+                out.append(arg)
+                if !arg.contains("="), i + 1 < argv.count, !argv[i + 1].hasPrefix("-") {
+                    out.append(argv[i + 1])
+                    i += 1
+                }
+            }
+            i += 1
+        }
+        return out
     }
 }
 
@@ -58,9 +87,9 @@ public struct SessionAssessment: Equatable, Sendable, Identifiable {
 }
 
 /// Lists running Claude processes of the current user and reads exactly two environment
-/// variables from each (`CLAUDE_CONFIG_DIR`, `SPILLOVER_PROFILE`), its working directory and
-/// the conversation id in its arguments. Every other environment variable and argument is
-/// discarded while parsing and never stored.
+/// variables from each (`CLAUDE_CONFIG_DIR`, `SPILLOVER_PROFILE`), its working directory, the
+/// conversation id in its arguments and the few flags in `RunningSession.resumeFlagNames`. Every
+/// other environment variable and argument is discarded while parsing and never stored.
 public struct SessionScanner {
     static let keptVariables: Set<String> = [ProfileEnvironment.configDirKey, ProfileEnvironment.profileKey]
 
@@ -86,7 +115,8 @@ public struct SessionScanner {
             pid: pid, executable: path, cwd: workingDirectory(pid),
             configDir: parsed.env[ProfileEnvironment.configDirKey],
             spilloverProfile: parsed.env[ProfileEnvironment.profileKey],
-            startedAt: info.started, conversationId: ConversationID.from(args: Array(parsed.argv.dropFirst())))
+            startedAt: info.started, conversationId: ConversationID.from(args: Array(parsed.argv.dropFirst())),
+            resumeFlags: RunningSession.resumeFlags(from: Array(parsed.argv.dropFirst())))
     }
 
     /// Compare each running session with today's assignments.

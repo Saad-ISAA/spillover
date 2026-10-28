@@ -40,7 +40,7 @@ struct SetupView: View {
 
             settingRow(
                 "Auto",
-                "Folders set to Auto stay on one account until it reaches the threshold, then switch to the next account with room. Open chats move after their current reply and once their background tasks finish, with their history."
+                "Folders set to Auto stay on one account until it reaches the threshold, then switch to the next account with room. Open chats move after their current reply, with their history; one that had background work running is resumed on the new account to pick that work up again."
             ) {
                 AutoSettings()
             }

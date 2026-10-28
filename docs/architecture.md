@@ -122,8 +122,13 @@ process has ended, the panel keeps the conversation and its next message starts 
 2. waits until the chat is between turns and has no background work (`ConversationActivity`: the
    last conversational record is a finished assistant reply, the file is quiet, and every
    background subagent or background command the process started has reported back with a task
-   notification; they run inside the chat's process and would end with it). Automatic moves accept
-   nothing less and keep waiting;
+   notification; they run inside the chat's process and would end with it). A move the user asks
+   for waits for that background work. An automatic move (the account is full) does not: it ends
+   the chat at the turn boundary and, when background work was running, resumes the chat on the
+   new account (`ChatResumer`: `claude --resume <id> -p "The account switched, please resume all
+   work."` through the launcher, with the chat's own permission and model flags), so that work
+   restarts there; a headless run stays alive until its own background work is done. A waiting
+   automatic move is dropped when the chat's account has room again;
 3. ends that one process (`SessionControl.end`, which re-checks the pid is still the same chat).
    It sends SIGINT, which a chat between turns treats as a clean exit, so the editor shows no
    error; SIGTERM follows only if the process is still running five seconds later;

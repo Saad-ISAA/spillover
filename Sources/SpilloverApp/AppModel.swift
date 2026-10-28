@@ -93,7 +93,7 @@ final class AppModel: ObservableObject {
                 self.ticks += 1
                 // Token totals come from walking session logs: every ten minutes is plenty.
                 if self.ticks % 20 == 0 && !self.scanning { self.scanLocalUsage() }
-                if self.ticks % 10 == 0 { self.refreshLimits() }
+                if self.ticks % 6 == 0 { self.refreshLimits() } else { self.followSavedLimits() }
             }
         }
     }
@@ -319,6 +319,19 @@ final class AppModel: ObservableObject {
                     self.refreshUsageSnapshots()
                 }
             }
+        }
+    }
+
+    /// Every 30 seconds between checks: newer limits Claude saved for any account (cheap, runs
+    /// nothing), so a limit that crosses the Auto threshold is acted on within a minute.
+    func followSavedLimits() {
+        guard checkingLimits.isEmpty, !DemoSessions.isActive(env) else { return }
+        let env = self.env
+        let profiles = self.profiles
+        Task.detached(priority: .utility) {
+            let fetcher = AccountUsageFetcher(env: env)
+            let changed = profiles.map { fetcher.follow($0) }.contains(true)
+            if changed { await MainActor.run { self.refreshUsageSnapshots() } }
         }
     }
 

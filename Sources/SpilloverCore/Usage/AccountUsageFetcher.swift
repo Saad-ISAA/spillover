@@ -32,14 +32,27 @@ public struct AccountUsageFetcher {
                 directory: folder)
         }
         guard let snapshot = cached(profile) else { return nil }
-        // A reading from a chat (statusline) can be newer than the CLI's cache; keep the newer.
+        return record(snapshot) ? snapshot : UsageStore(env: env).load(profileId: profile.id)
+    }
+
+    /// Picks up usage Claude saved for the account since Spillover last looked (the editor's usage
+    /// panel, a `/usage` in a chat, another check), without running anything. True when a newer
+    /// reading was recorded.
+    @discardableResult
+    public func follow(_ profile: Profile) -> Bool {
+        guard let snapshot = cached(profile) else { return false }
+        return record(snapshot)
+    }
+
+    /// Keeps the newer reading: one from a chat (statusline) can be newer than Claude's cache.
+    private func record(_ snapshot: UsageSnapshot) -> Bool {
         let store = UsageStore(env: env)
-        if let current = store.load(profileId: profile.id), current.capturedAt >= snapshot.capturedAt {
-            return current
+        if let current = store.load(profileId: snapshot.profileId), current.capturedAt >= snapshot.capturedAt {
+            return false
         }
         try? store.save(snapshot)
         try? UsageHistory(env: env).record(snapshot)
-        return snapshot
+        return true
     }
 
     /// The account's state file: `<config dir>/.claude.json`, or `~/.claude.json` for Default.
