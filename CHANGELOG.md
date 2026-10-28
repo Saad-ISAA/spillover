@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.1 (2026-10-28)
+
+Fixes for moving chats between accounts.
+
+- Auto no longer cuts off background subagents and background commands when it moves a chat: a
+  chat that had background work running is resumed on the new account ("The account switched,
+  please resume all work.") so that work restarts there.
+- Auto folders keep one account until it reaches the threshold, instead of picking again on every
+  launch, so a window and its chats no longer switch back and forth.
+- Open chats move only when their account is actually full, not when a limit is merely forecast
+  to run out; a pending move is dropped when the account has room again.
+- Moving a chat no longer opens a new VS Code window or a second copy of the chat: it stays in its
+  panel and its next message continues on the new account.
+- Limits are picked up within about 30 seconds of Claude saving them.
+- Helper processes (the Chrome extension host, plugin runs in temporary folders) are no longer
+  listed or moved as chats.
+
 ## 0.1.0 (2026-10-27)
 
 First public release.
