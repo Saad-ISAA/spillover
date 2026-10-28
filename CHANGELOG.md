@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.5 (unreleased)
+
+- Fixed: in an Auto folder, a chat you resumed after its account's limit reset was moved to
+  another account (and its history copied there) whenever the folder had switched accounts while
+  the first one was full. A resumed chat now stays on the account it was on while that account
+  has room; the folder's account is used for new chats.
+
 ## 0.1.4 (2026-10-28)
 
 - Auto no longer stops a chat's background work (subagents, background commands) when its account

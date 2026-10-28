@@ -111,21 +111,21 @@ public struct AutoPolicy: Codable, Equatable, Sendable {
         return false
     }
 
-    /// The account Auto uses right now. `current` (the folder's account so far) is kept until it is
-    /// full; then `preferring` (the account that already holds a resumed conversation) wins while
-    /// it has room, so neither a window nor a chat hops back and forth. Nil only when no account
-    /// is usable.
+    /// The account Auto uses right now. `preferring` (the account that already holds a resumed
+    /// conversation) is kept until it is full, then `current` (the folder's account so far), so
+    /// neither a chat nor a window hops back and forth. Nil only when no account is usable.
     public func choose(
         profiles: [Profile], snapshots: [String: UsageSnapshot], now: Date = Date(), preferring: String? = nil,
         current: String? = nil
     ) -> Profile? {
         let candidates = candidates(from: profiles)
-        if let current, let p = candidates.first(where: { $0.id == current }), !isFull(snapshots[p.id], now: now) {
+        // A resumed chat stays on the account that holds it while that account is not full, even
+        // when the folder has since moved on (moving it would copy its history and switch its
+        // account for nothing). The folder's own account applies to new chats.
+        if let preferring, let p = candidates.first(where: { $0.id == preferring }), !isFull(snapshots[p.id], now: now) {
             return p
         }
-        if let preferring, let p = candidates.first(where: { $0.id == preferring }),
-            !isOutOfRoom(snapshots[p.id], now: now)
-        {
+        if let current, let p = candidates.first(where: { $0.id == current }), !isFull(snapshots[p.id], now: now) {
             return p
         }
         if let roomy = candidates.first(where: { !isOutOfRoom(snapshots[$0.id], now: now) }) { return roomy }

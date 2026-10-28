@@ -205,6 +205,17 @@ final class AutoPolicyTests: XCTestCase {
         XCTAssertEqual(AutoPolicy(order: ["a", "b"]).choose(profiles: [a, b], snapshots: [:], now: now, preferring: "b")?.id, "b")
         let full = ["b": snapshot("b", five: 97)]
         XCTAssertEqual(AutoPolicy(order: ["a", "b"]).choose(profiles: [a, b], snapshots: full, now: now, preferring: "b")?.id, "a")
+        // The folder moved to "a" while "b" was full; once "b" has reset, a chat resumed from "b"
+        // stays there instead of being copied to the folder's account.
+        let reset = ["a": snapshot("a", five: 20), "b": snapshot("b", five: 1)]
+        XCTAssertEqual(
+            AutoPolicy(order: ["a", "b"]).choose(profiles: [a, b], snapshots: reset, now: now, preferring: "b", current: "a")?.id, "b")
+        // A new chat (nothing to prefer) uses the folder's account.
+        XCTAssertEqual(AutoPolicy(order: ["b", "a"]).choose(profiles: [a, b], snapshots: reset, now: now, current: "a")?.id, "a")
+        // While the chat's own account is still full, the folder's account takes it.
+        let stillFull = ["a": snapshot("a", five: 20), "b": snapshot("b", five: 100)]
+        XCTAssertEqual(
+            AutoPolicy(order: ["a", "b"]).choose(profiles: [a, b], snapshots: stillFull, now: now, preferring: "b", current: "a")?.id, "a")
     }
 
     func testOlderAutoFilesStillLoad() throws {
