@@ -89,6 +89,8 @@ final class ConversationTests: XCTestCase {
                 "--permission-mode=bypassPermissions",
             ])
         XCTAssertEqual(ConversationID.from(args: call.args), "1b671a64-40d5-491e-99b0-da01ff1f3341")
+        // Marked, so the editor cannot start the same chat a second time while it runs.
+        XCTAssertEqual(call.env?[ProfileEnvironment.resumedRunKey], "1")
     }
 
     func testBackgroundTasksKeepAChatBusy() {

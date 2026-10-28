@@ -101,7 +101,7 @@ extension AppModel {
     /// Auto folders: move open chats off an account that ran low, at their next idle moment.
     func autoMoveChatsIfNeeded() {
         guard autoPolicy.moveOpenChats else { return }
-        for a in sessions {
+        for a in sessions where !a.session.resumedBySpillover {
             guard case .stale(let expected) = a.state, let cwd = a.session.cwd, a.session.editor != nil,
                 let id = a.session.conversationId, moves[id]?.blocksAutomaticRetry(now: now) != true,
                 case .routed(_, let route) = resolution(for: cwd), route.profileId == Profile.autoID,
@@ -134,6 +134,29 @@ extension AppModel {
     /// Accounts in Auto's order of preference, for display.
     var autoOrder: [Profile] { autoPolicy.ordered(profiles) }
 
+    /// Stop a chat Spillover resumed in the background, so it can continue in the editor. Its
+    /// background tasks stop with it; the chat can be asked to pick them up again there.
+    func takeOver(_ a: SessionAssessment) {
+        guard a.session.resumedBySpillover else { return }
+        do {
+            try SessionControl.end(a.session)
+            let name = a.session.cwd.map(Fmt.folderName) ?? "That"
+            show(.info, "\(name) chat stopped in the background. Continue it in VS Code; its background work stopped too, so ask it to pick that up again.")
+        } catch {
+            show(.error, error.localizedDescription)
+        }
+        refreshSessions()
+    }
+
+    /// Tells when a chat resumed in the background has finished and can be opened in the editor.
+    func noteFinishedResumedRuns(before: [SessionAssessment], now: [SessionAssessment]) {
+        let running = Set(now.map(\.session.pid))
+        for a in before where a.session.resumedBySpillover && !running.contains(a.session.pid) {
+            let name = a.session.cwd.map(Fmt.folderName) ?? "A"
+            show(.success, "\(name) chat finished its background work. Continue it in VS Code: its next message picks up where it left off.")
+        }
+    }
+
     func move(for a: SessionAssessment) -> ChatMove? {
         a.session.conversationId.flatMap { moves[$0] }
     }
@@ -155,7 +178,7 @@ extension AppModel {
     }
 
     private func startMove(_ a: SessionAssessment, automatic: Bool) {
-        guard !DemoSessions.isActive(env) else { return }
+        guard !DemoSessions.isActive(env), !a.session.resumedBySpillover else { return }
         guard case .stale(let expectedID) = a.state, let target = profile(id: expectedID) else { return }
         guard let cwd = a.session.cwd, let editor = a.session.editor else {
             if !automatic {
@@ -268,7 +291,7 @@ extension AppModel {
             // keeps the old email until the window reloads; the chat itself is already moved.
             show(.success, "\(name) chat moved to \(target.displayName) with its history: its next message runs there. Claude's Account panel shows the new email after you reload the window.")
         case .resumed:
-            show(.success, "\(name) chat moved to \(target.displayName). Its background work had to stop, so Spillover resumed it there (\"\(ChatResumer.message)\"). It works in the background until done; let it finish before typing in that chat.")
+            show(.success, "\(name) chat moved to \(target.displayName). Its background work had to stop, so Spillover resumed it there (\"\(ChatResumer.message)\"). It keeps working in the background, listed under Sessions; the chat opens again in VS Code when it is done, or choose Take over there.")
         case .closed:
             show(.info, "The \(name) chat was closed. It continues on \(target.displayName), with its history, when you reopen it.")
         case .failed(let why):

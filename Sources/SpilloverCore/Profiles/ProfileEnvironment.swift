@@ -7,6 +7,9 @@ public enum ProfileEnvironment {
     public static let configDirKey = "CLAUDE_CONFIG_DIR"
     /// Set on every routed launch so tools (and statuslines) can see which profile is active.
     public static let profileKey = "SPILLOVER_PROFILE"
+    /// Set on a chat Spillover resumed by itself after moving it (see `ChatResumer`), so the
+    /// launcher, Auto and the session list can tell that run apart from the editor's own.
+    public static let resumedRunKey = "SPILLOVER_RESUMED_RUN"
 
     /// Isolated profile -> variable set to its directory. Default profile -> variable REMOVED
     /// (never set to `~/.claude`: that would select a different Keychain item).

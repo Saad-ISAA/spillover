@@ -5,7 +5,8 @@ import Foundation
 /// process, so the chat is resumed on the folder's new account with a short message asking it to
 /// pick its work up again. The run goes through Spillover's launcher, so the folder's account and
 /// the history handoff apply exactly as for a chat the editor starts, and it keeps running until
-/// its own background work has finished. The editor shows the result with the chat's next message.
+/// its own background work has finished. Until then the launcher refuses to start the chat a
+/// second time from the editor (two processes would run the same background tasks at once).
 public struct ChatResumer {
     public static let message = "The account switched, please resume all work."
 
@@ -27,6 +28,13 @@ public struct ChatResumer {
     public func resume(conversationId: String, folder: String, flags: [String]) throws -> Int32 {
         try runner.spawnDetached(
             env.paths.launcher.path, Self.arguments(conversationId: conversationId, flags: flags),
-            env: env.processEnv, directory: URL(fileURLWithPath: folder, isDirectory: true))
+            env: Self.environment(env.processEnv), directory: URL(fileURLWithPath: folder, isDirectory: true))
+    }
+
+    /// The resumed run's environment: Spillover's own, marked as a resumed run.
+    public static func environment(_ base: [String: String]) -> [String: String] {
+        var out = base
+        out[ProfileEnvironment.resumedRunKey] = "1"
+        return out
     }
 }

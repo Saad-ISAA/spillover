@@ -16,6 +16,9 @@ public struct RunningSession: Equatable, Sendable, Identifiable {
     /// The chat's permission mode, model and similar flags (`resumeFlagNames`), so a resumed run
     /// behaves like the chat did. Nothing else from the arguments is kept.
     public let resumeFlags: [String]
+    /// True for a chat Spillover resumed without the editor after moving it; it runs until the
+    /// chat's background work is done, and its editor panel must not start a second copy.
+    public let resumedBySpillover: Bool
 
     public var id: Int32 { pid }
 
@@ -24,7 +27,8 @@ public struct RunningSession: Equatable, Sendable, Identifiable {
 
     public init(
         pid: Int32, executable: String, cwd: String?, configDir: String?, spilloverProfile: String?,
-        startedAt: Date?, conversationId: String? = nil, resumeFlags: [String] = []
+        startedAt: Date?, conversationId: String? = nil, resumeFlags: [String] = [],
+        resumedBySpillover: Bool = false
     ) {
         self.pid = pid
         self.executable = executable
@@ -34,6 +38,7 @@ public struct RunningSession: Equatable, Sendable, Identifiable {
         self.startedAt = startedAt
         self.conversationId = conversationId
         self.resumeFlags = resumeFlags
+        self.resumedBySpillover = resumedBySpillover
     }
 
     /// Flags carried over when Spillover resumes a chat (none of them holds a secret).
@@ -91,7 +96,9 @@ public struct SessionAssessment: Equatable, Sendable, Identifiable {
 /// conversation id in its arguments and the few flags in `RunningSession.resumeFlagNames`. Every
 /// other environment variable and argument is discarded while parsing and never stored.
 public struct SessionScanner {
-    static let keptVariables: Set<String> = [ProfileEnvironment.configDirKey, ProfileEnvironment.profileKey]
+    static let keptVariables: Set<String> = [
+        ProfileEnvironment.configDirKey, ProfileEnvironment.profileKey, ProfileEnvironment.resumedRunKey,
+    ]
 
     private let env: SBEnvironment
 
@@ -116,7 +123,13 @@ public struct SessionScanner {
             configDir: parsed.env[ProfileEnvironment.configDirKey],
             spilloverProfile: parsed.env[ProfileEnvironment.profileKey],
             startedAt: info.started, conversationId: ConversationID.from(args: Array(parsed.argv.dropFirst())),
-            resumeFlags: RunningSession.resumeFlags(from: Array(parsed.argv.dropFirst())))
+            resumeFlags: RunningSession.resumeFlags(from: Array(parsed.argv.dropFirst())),
+            resumedBySpillover: parsed.env[ProfileEnvironment.resumedRunKey] == "1")
+    }
+
+    /// Spillover's own resumed run of this conversation, while it is still working.
+    public func resumedRun(of conversationId: String) -> RunningSession? {
+        scan().first { $0.resumedBySpillover && $0.conversationId == conversationId }
     }
 
     /// Compare each running session with today's assignments.

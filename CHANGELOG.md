@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.3 (unreleased)
+
+- Fixed: after Auto moved a chat that had background work and resumed it on the new account,
+  typing in that chat in VS Code started a second copy of it. The copy reported the background
+  work as stopped and started it again, so the same subagents ran twice in the same files. While
+  a resumed chat is still working, VS Code now shows that it is busy instead of starting it
+  again. Sessions lists it as In background, with Take over to stop it and continue in VS Code
+  right away, and Spillover tells you when it has finished.
+
 ## 0.1.2 (2026-10-28)
 
 - Fixed: with MCP servers shared, every VS Code chat on that account stopped at once with "Claude
