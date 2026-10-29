@@ -4,14 +4,16 @@ import Foundation
 ///
 /// An Auto folder keeps the account it is on until that account is full (its fullest limit at
 /// `threshold` percent), so its window does not switch accounts back and forth. When it needs a
-/// new one, the first account in `order` with room is used; an account has room while it is not
-/// full and no window is forecast to run out within `runOutMinutes`. When none has room, the
-/// least used one is taken (work continues rather than being refused). Open chats move only when
+/// new one, the account with the most room is used: of the accounts with room, the one whose
+/// fullest limit (session or week) is lowest, with `order` breaking ties. An account has room while
+/// it is not full and no window is forecast to run out within `runOutMinutes`. When none has room,
+/// the least used one is taken (work continues rather than being refused). Open chats move only when
 /// their account is full, at their next idle moment, when `moveOpenChats` is on; a chat with
 /// background work running waits for it unless its account is nearly out (`isNearlyOut`).
 public struct AutoPolicy: Codable, Equatable, Sendable {
     public var version = 1
-    /// Account ids in order of preference. Empty means every account, in registry order.
+    /// Account ids in order of preference, used to break ties between accounts with equal room.
+    /// Empty means every account, in registry order.
     public var order: [String] = []
     public var threshold: Double = 90
     public var runOutMinutes: Double = 30
@@ -134,12 +136,15 @@ public struct AutoPolicy: Codable, Equatable, Sendable {
         if let current, let p = candidates.first(where: { $0.id == current }), !isFull(snapshots[p.id], now: now) {
             return p
         }
-        if let roomy = candidates.first(where: { !isOutOfRoom(snapshots[$0.id], now: now) }) { return roomy }
-        if let notFull = candidates.first(where: { !isFull(snapshots[$0.id], now: now) }) { return notFull }
-        return candidates.min {
-            (snapshots[$0.id]?.peakPercentage(at: now) ?? 0) < (snapshots[$1.id]?.peakPercentage(at: now) ?? 0)
-        }
+        // The most room first: the lowest fullest limit wins; `min` keeps the earlier account in
+        // `order` on a tie. An account without a reading yet counts as unused.
+        let used = { (p: Profile) in snapshots[p.id]?.peakPercentage(at: now) ?? 0 }
+        let byRoom = { (a: Profile, b: Profile) in used(a) < used(b) }
+        if let roomy = candidates.filter({ !isOutOfRoom(snapshots[$0.id], now: now) }).min(by: byRoom) { return roomy }
+        if let notFull = candidates.filter({ !isFull(snapshots[$0.id], now: now) }).min(by: byRoom) { return notFull }
+        return candidates.min(by: byRoom)
     }
+
 }
 
 public enum AutoPolicyLoad: Equatable {

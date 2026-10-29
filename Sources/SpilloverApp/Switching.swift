@@ -134,7 +134,7 @@ extension AppModel {
         }
     }
 
-    /// Accounts in Auto's order of preference, for display.
+    /// Accounts in the order Auto uses to break ties, for display.
     var autoOrder: [Profile] { autoPolicy.ordered(profiles) }
 
     func move(for a: SessionAssessment) -> ChatMove? {

@@ -178,16 +178,27 @@ final class AutoPolicyTests: XCTestCase {
         ])
     }
 
-    func testChoosesFirstAccountWithRoomInOrder() throws {
+    func testChoosesTheAccountWithTheMostRoom() throws {
         let box = try Sandbox()
         let a = Profile(id: "a", displayName: "A", configDir: try box.mkdir("a").path)
         let b = Profile(id: "b", displayName: "B", configDir: try box.mkdir("b").path)
         let c = Profile(id: "c", displayName: "C", configDir: try box.mkdir("c").path)
         let policy = AutoPolicy(order: ["b", "a", "c"])
-        let snaps = ["b": snapshot("b", five: 92), "a": snapshot("a", five: 40)]
+        let snaps = ["b": snapshot("b", five: 92), "a": snapshot("a", five: 40), "c": snapshot("c", five: 55)]
         XCTAssertEqual(policy.choose(profiles: [a, b, c], snapshots: snaps, now: now)?.id, "a")
-        // Unknown usage counts as room.
-        XCTAssertEqual(AutoPolicy(order: ["c", "a"]).choose(profiles: [a, b, c], snapshots: snaps, now: now)?.id, "c")
+        // The weekly limit counts too: an account fresh this session but nearly through its week loses.
+        let accounts = ["main", "work", "office", "new"].map { Profile(id: $0, displayName: $0, configDir: try! box.mkdir($0).path) }
+        let tonight = [
+            "main": snapshot("main", five: 6, seven: 66), "work": snapshot("work", five: 100, seven: 66),
+            "office": snapshot("office", five: 5, seven: 94), "new": snapshot("new", five: 4, seven: 4),
+        ]
+        XCTAssertEqual(
+            AutoPolicy(order: ["main", "work", "office", "new"]).choose(profiles: accounts, snapshots: tonight, now: now)?.id, "new")
+        // Equal room: the order decides. Unknown usage counts as unused.
+        let even = ["a": snapshot("a", five: 30), "c": snapshot("c", five: 30)]
+        XCTAssertEqual(AutoPolicy(order: ["c", "a", "b"]).choose(profiles: [a, b, c], snapshots: even, now: now)?.id, "b")
+        XCTAssertEqual(
+            AutoPolicy(order: ["c", "a"]).choose(profiles: [a, c], snapshots: even, now: now)?.id, "c")
         // Nobody has room: the least used one.
         let full = ["a": snapshot("a", five: 99), "b": snapshot("b", five: 93), "c": snapshot("c", five: 97)]
         XCTAssertEqual(policy.choose(profiles: [a, b, c], snapshots: full, now: now)?.id, "b")

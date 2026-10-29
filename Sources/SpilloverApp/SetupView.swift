@@ -40,7 +40,7 @@ struct SetupView: View {
 
             settingRow(
                 "Auto",
-                "Folders set to Auto stay on one account until it reaches the threshold, then switch to the next account with room. Open chats move after their current reply, with their history; one that had background work running is resumed on the new account to pick that work up again."
+                "Folders set to Auto stay on one account until it reaches the threshold, then switch to the account with the most room (session and week limits both count). Open chats move after their current reply, with their history; one that had background work running is resumed on the new account to pick that work up again."
             ) {
                 AutoSettings()
             }
@@ -221,7 +221,7 @@ private struct AutoSettings: View {
     var body: some View {
         let order = model.autoOrder
         VStack(alignment: .leading, spacing: 0) {
-            Text("Order of preference").font(TypeScale.metaStrong).foregroundStyle(Ink.muted).padding(.bottom, 4)
+            Text("Order when accounts have equal room").font(TypeScale.metaStrong).foregroundStyle(Ink.muted).padding(.bottom, 4)
             ForEach(Array(order.enumerated()), id: \.element.id) { i, p in
                 if i > 0 { Rule() }
                 HStack(spacing: 10) {
