@@ -90,8 +90,9 @@ extension AppModel {
                 log.recordAttempt(stop, outcome: "resumed")
                 confirmResumed(stop, title: title)
             } catch {
-                log.recordAttempt(stop, outcome: error.localizedDescription)
-                show(.error, "Could not resume “\(title)” (\(name)) after its limit reset: \(error.localizedDescription) Send it a message to continue.")
+                if log.recordFailedTry(stop, reason: error.localizedDescription) {
+                    show(.error, "Could not resume “\(title)” (\(name)) after its limit reset: \(error.localizedDescription) Send it a message to continue.")
+                }
             }
         }
         checkStoppedChats()

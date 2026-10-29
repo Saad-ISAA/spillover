@@ -3,10 +3,13 @@ import ApplicationServices
 import SpilloverCore
 
 /// Sends a message to one Claude chat inside a VS Code window, the way a person would: the chat's
-/// panel is found by its title, checked to be idle with an empty input, focused, and the message is
-/// typed and sent with Return. Claude's extension takes no message from other apps and ignores
-/// text placed into its input from outside, so real key presses are the only way in. Needs the
-/// Accessibility permission. Everything is checked before a key is pressed; any doubt refuses.
+/// panel is found by its title, checked to be idle with an empty input, its message box is focused,
+/// and the message is typed and sent with Return. Claude's extension takes no message from other
+/// apps and ignores text placed into its input from outside, so key presses are the only way in.
+/// They are posted to VS Code's own process, which needs no window in front: VS Code stays where
+/// it is, whatever app is in front keeps the screen, and no key can land anywhere else (a
+/// background app cannot bring another one to the front anyway). Needs the Accessibility
+/// permission. Everything is checked before a key is sent; any doubt refuses.
 @MainActor
 enum ChatSender {
     enum Failure: Error, LocalizedError, Equatable {
@@ -48,9 +51,8 @@ enum ChatSender {
         CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
     }
 
-    /// Types `text` into the chat titled `title` in the VS Code window for `folder`, then puts the
-    /// previously active app back in front. When the chat is not open in that window it is opened
-    /// there by its id first.
+    /// Types `text` into the chat titled `title` in the VS Code window for `folder`. When the chat is
+    /// not open in that window it is opened there by its id first (which brings VS Code forward).
     static func send(_ text: String, toChat title: String, conversationId: String, folder: String) throws {
         guard isAllowed else { throw Failure.notAllowed }
         guard let code = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first else {
@@ -61,13 +63,10 @@ enum ChatSender {
         AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue)
         guard let window = window(in: app, folder: folder) else { throw Failure.windowNotFound }
 
-        let previous = NSWorkspace.shared.frontmostApplication
-        defer {
-            if let previous, previous.bundleIdentifier != bundleID { previous.activate() }
-        }
         var chat = panels(in: window).filter { $0.title == title }
         if chat.isEmpty, let url = URL(string: "vscode://anthropic.claude-code/open?session=\(conversationId)") {
-            bringForward(code, window)
+            // The link opens the chat in the window in front, so that window goes first.
+            AXUIElementPerformAction(window, kAXRaiseAction as CFString)
             NSWorkspace.shared.open(url)
             Thread.sleep(forTimeInterval: 2.5)
             chat = panels(in: window).filter { $0.title == title }
@@ -76,17 +75,16 @@ enum ChatSender {
         guard !panel.busy else { throw Failure.chatBusy }
         guard isEmptyInput(value(panel.input)) else { throw Failure.draftInInput }
 
-        bringForward(code, window)
+        let pid = code.processIdentifier
+        AXUIElementSetAttributeValue(window, kAXMainAttribute as CFString, kCFBooleanTrue)
         AXUIElementSetAttributeValue(panel.input, kAXFocusedAttribute as CFString, kCFBooleanTrue)
         Thread.sleep(forTimeInterval: 0.4)
-        guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundleID, isFocused(panel.input) else {
-            throw Failure.couldNotFocus
-        }
-        press(0, flags: .maskCommand)  // ⌘A, so whatever the box shows is replaced
-        type(text)
+        guard isFocused(panel.input) else { throw Failure.couldNotFocus }
+        press(0, flags: .maskCommand, to: pid)  // ⌘A, so whatever the box shows is replaced
+        type(text, to: pid)
         Thread.sleep(forTimeInterval: 0.3)
         guard value(panel.input) == text, isFocused(panel.input) else { throw Failure.notSent }
-        press(36)  // Return
+        press(36, to: pid)  // Return
         Thread.sleep(forTimeInterval: 1.0)
         guard isEmptyInput(value(panel.input)) else { throw Failure.notSent }
     }
@@ -141,31 +139,25 @@ enum ChatSender {
 
     // MARK: Accessibility and keys
 
-    private static func bringForward(_ code: NSRunningApplication, _ window: AXUIElement) {
-        code.activate()
-        AXUIElementPerformAction(window, kAXRaiseAction as CFString)
-        AXUIElementSetAttributeValue(window, kAXMainAttribute as CFString, kCFBooleanTrue)
-        Thread.sleep(forTimeInterval: 0.6)
-    }
-
-    private static func press(_ key: CGKeyCode, flags: CGEventFlags = []) {
+    /// Keys go to VS Code's process only, never to the app in front.
+    private static func press(_ key: CGKeyCode, flags: CGEventFlags = [], to pid: pid_t) {
         let source = CGEventSource(stateID: .hidSystemState)
         for down in [true, false] {
             guard let event = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: down) else { continue }
             event.flags = flags
-            event.post(tap: .cghidEventTap)
+            event.postToPid(pid)
             Thread.sleep(forTimeInterval: 0.02)
         }
     }
 
-    private static func type(_ text: String) {
+    private static func type(_ text: String, to pid: pid_t) {
         let source = CGEventSource(stateID: .hidSystemState)
         for unit in text.utf16 {
             var c = unit
             for down in [true, false] {
                 guard let event = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: down) else { continue }
                 event.keyboardSetUnicodeString(stringLength: 1, unicodeString: &c)
-                event.post(tap: .cghidEventTap)
+                event.postToPid(pid)
             }
             Thread.sleep(forTimeInterval: 0.015)
         }

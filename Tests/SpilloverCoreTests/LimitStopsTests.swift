@@ -144,6 +144,22 @@ final class LimitStopsTests: XCTestCase {
         XCTAssertEqual(entry.roomSince.map { Int($0.timeIntervalSince1970) }, Int(since.timeIntervalSince1970))
         XCTAssertTrue(LimitResumeLog.isDue(entry, now: since.addingTimeInterval(LimitStops.grace)))
 
+        // A failed try waits two minutes, then tries again; the third failure gives up.
+        let retry = LimitStop(
+            conversationId: "8d36b792-f4a5-4c6d-92e9-b5a52435e2f9", cwd: stop.cwd, title: stop.title,
+            stoppedAt: stopped, profileId: "work", transcript: stop.transcript)
+        log.note(retry, roomSince: since)
+        XCTAssertFalse(log.recordFailedTry(retry, reason: "busy", at: Date()))
+        var e = log.note(retry, roomSince: since)
+        XCTAssertTrue(e.isRetrying)
+        XCTAssertFalse(LimitResumeLog.isDue(e, now: Date().addingTimeInterval(60)))
+        XCTAssertTrue(LimitResumeLog.isDue(e, now: Date().addingTimeInterval(LimitResumeLog.retryInterval + 1)))
+        XCTAssertFalse(log.recordFailedTry(retry, reason: "busy"))
+        XCTAssertTrue(log.recordFailedTry(retry, reason: "busy"))
+        e = log.note(retry, roomSince: since)
+        XCTAssertFalse(e.isRetrying)
+        XCTAssertFalse(LimitResumeLog.isDue(e, now: Date().addingTimeInterval(3600)))
+
         // Acted on once, never again for this stop.
         log.recordAttempt(stop, outcome: "resumed")
         XCTAssertFalse(LimitResumeLog.isDue(log.note(stop, roomSince: since), now: Date().addingTimeInterval(3600)))

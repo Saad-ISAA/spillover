@@ -178,11 +178,13 @@ tree (`AXManualAccessibility`), finds the window whose title ends with the folde
 it the chat panel whose header shows the chat's title (a renamed title, else the generated one).
 It refuses unless that panel is idle (Send, not Stop) and its message box is empty (an empty box
 reports its placeholder), and waits until the user has not touched the keyboard or mouse for 15
-seconds. It then brings the window forward, focuses that box, checks the focus, selects all,
-types the message, checks it landed, presses Return, checks the box emptied, and puts the
-previous app back in front. A chat not open in its window is opened there by its id first.
-Afterwards the transcript is checked for the message; failures are reported, never retried.
-Nothing runs out of sight: the chat continues in its own panel and process, through the launcher.
+seconds. It then focuses that box through accessibility, checks the focus, and posts the keys
+(select all, the message, Return) to VS Code's own process, so VS Code needs no window in front:
+the app in front keeps the screen and no key can land in it (a background app cannot bring
+another one to the front on current macOS, which is why a first version failed with "could not
+be focused"). It checks the text landed and that the box emptied. A chat not open in its window
+is opened there by its id first. A failed try is retried twice, two minutes apart; afterwards the
+transcript is checked for the message, and failures are reported. Nothing runs out of sight: the chat continues in its own panel and process, through the launcher.
 
 ## Editor and extension lifecycle
 

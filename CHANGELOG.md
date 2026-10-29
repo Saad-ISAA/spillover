@@ -2,6 +2,12 @@
 
 ## 0.1.6 (unreleased)
 
+- Fixed: resuming a chat after its limit reset failed with "its message box could not be focused"
+  when Spillover was in the background (as it is overnight): macOS does not let a background app
+  bring VS Code to the front. Spillover now types into the chat without bringing anything to the
+  front, so it works while you use other apps or are away, and never takes the screen from you.
+  A failed try is retried twice, two minutes apart, and the Overview shows "Retrying".
+
 - The Accessibility permission for resuming chats is checked again every 30 seconds and whenever
   Spillover comes to the front, so its warning clears without a restart, and it explains that
   after an update macOS may need Spillover removed from the Accessibility list and allowed again.

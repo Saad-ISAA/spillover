@@ -98,7 +98,10 @@ struct ResumeStatePill: View {
     let chat: StoppedChat
 
     var body: some View {
-        if let outcome = chat.entry.outcome {
+        if chat.entry.isRetrying, let why = chat.entry.outcome {
+            Pill(text: "Retrying (\(chat.entry.tries ?? 1) of \(LimitResumeLog.maxTries))", tone: .warning)
+                .help("The last try failed: \(why) Spillover tries again in two minutes.")
+        } else if let outcome = chat.entry.outcome {
             let when = chat.entry.attemptedAt.map { " \(Fmt.moment($0, now: model.now))" } ?? ""
             if outcome == "resumed" {
                 Pill(text: "Resumed\(when)", tone: .positive)

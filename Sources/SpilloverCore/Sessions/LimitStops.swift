@@ -205,17 +205,33 @@ public struct LimitResumeLog {
         public var stoppedAt: Date
         /// Since when the chat's account has had room (the earliest time seen for this stop).
         public var roomSince: Date?
+        /// When it was resumed, or given up on after its last try.
         public var attemptedAt: Date?
-        /// "resumed", or why it could not be resumed.
+        /// "resumed", or why it could not be resumed (so far, while tries remain).
         public var outcome: String?
+        /// Failed tries so far, and when the last one was.
+        public var tries: Int?
+        public var lastTryAt: Date?
 
-        public init(stoppedAt: Date, roomSince: Date? = nil, attemptedAt: Date? = nil, outcome: String? = nil) {
+        public init(
+            stoppedAt: Date, roomSince: Date? = nil, attemptedAt: Date? = nil, outcome: String? = nil,
+            tries: Int? = nil, lastTryAt: Date? = nil
+        ) {
             self.stoppedAt = stoppedAt
             self.roomSince = roomSince
             self.attemptedAt = attemptedAt
             self.outcome = outcome
+            self.tries = tries
+            self.lastTryAt = lastTryAt
         }
+
+        /// A try failed and another one will follow.
+        public var isRetrying: Bool { attemptedAt == nil && (tries ?? 0) > 0 }
     }
+
+    /// Tries per stop, and the wait between them (a chat can be busy, or VS Code can be mid-update).
+    public static let maxTries = 3
+    public static let retryInterval: TimeInterval = 120
 
     private let url: URL
 
@@ -256,10 +272,27 @@ public struct LimitResumeLog {
         save(all)
     }
 
+    /// Notes a failed try; after the last one the stop is given up on. Returns true when it was
+    /// the last.
+    @discardableResult
+    public func recordFailedTry(_ stop: LimitStop, reason: String, at: Date = Date()) -> Bool {
+        var all = entries()
+        var entry = all[stop.conversationId] ?? Entry(stoppedAt: stop.stoppedAt)
+        entry.tries = (entry.tries ?? 0) + 1
+        entry.lastTryAt = at
+        entry.outcome = reason
+        let last = (entry.tries ?? 0) >= Self.maxTries
+        if last { entry.attemptedAt = at }
+        all[stop.conversationId] = entry
+        save(all)
+        return last
+    }
+
     /// True when the stop has not been acted on and its account has had room for the grace period,
-    /// but not for longer than the resume window.
+    /// but not for longer than the resume window; after a failed try, once the retry wait is over.
     public static func isDue(_ entry: Entry, now: Date = Date()) -> Bool {
         guard entry.attemptedAt == nil, let since = entry.roomSince else { return false }
+        if let last = entry.lastTryAt, now.timeIntervalSince(last) < retryInterval { return false }
         let waited = now.timeIntervalSince(since)
         return waited >= LimitStops.grace && waited <= LimitStops.grace + LimitStops.resumeWindow
     }
