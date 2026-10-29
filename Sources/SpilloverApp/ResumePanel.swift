@@ -69,6 +69,7 @@ struct ResumePanel: View {
         } else if let checked = model.lastStoppedCheck {
             parts.append("Checked \(Fmt.relative(checked, now: model.now)); checks every minute.")
         }
+        if let awake = model.awakeStatus { parts.append(awake) }
         if leftAlone > 0 {
             parts.append("\(Fmt.plural(leftAlone, "older stopped chat")) left as \(leftAlone == 1 ? "it is" : "they are").")
         }

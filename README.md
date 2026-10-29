@@ -15,6 +15,7 @@ It lives in the menu bar and also shows each account's session and weekly limits
 - **Move open chats**: switch a VS Code window to another account and its chats move with their history, each after its current reply.
 - **Auto**: folders set to Auto start each chat on the account with the most room and move chats on when an account reaches its threshold (90% by default); a resumed chat stays on its account while that account has room.
 - **Resume after limits** (opt-in): chats stopped by a usage limit continue on their own, in their own VS Code panel, a minute after their account has room again, and chats Auto moves pick their background work back up on the new account. The Overview shows what will resume and when.
+- **Keep Mac awake** (opt-in): between the times you choose (say 22:00 to 08:00), the Mac does not go to sleep, so Claude sessions keep running through the night.
 - **Shared setup**: new accounts can reuse your skills, agents, commands, plugins, hooks and MCP servers; logins, history and sessions stay separate per account.
 - **Usage at a glance**: 5-hour and weekly limits for every account, checked every few minutes the way `/usage` does (no message sent), pace forecasts, and token totals from local session logs. Optional notifications at 80% and 95%.
 - **Live sessions**: every running Claude chat, which account it is on, and which ones still use an old account after you reassigned their folder.

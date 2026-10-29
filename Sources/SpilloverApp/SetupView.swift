@@ -45,6 +45,13 @@ struct SetupView: View {
                 AutoSettings()
             }
 
+            settingRow(
+                "Keep Mac awake",
+                "For Claude sessions that run through the night: between the times you choose, this Mac does not go to sleep, so chats keep working and chats stopped by a limit can be resumed. Only while Spillover runs; a laptop on battery still sleeps when its lid is closed."
+            ) {
+                AwakeSettings()
+            }
+
             settingRow("Limit tracking", "Each account records its limits through its Claude statusline. Your own statusline keeps working.") {
                 VStack(spacing: 0) {
                     ForEach(Array(model.profiles.enumerated()), id: \.element.id) { i, p in
@@ -287,5 +294,48 @@ private struct AutoSettings: View {
         guard ids.indices.contains(j) else { return }
         ids.swapAt(index, j)
         model.updateAutoPolicy { $0.order = ids }
+    }
+}
+
+private struct AwakeSettings: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            line("Keep this Mac awake", isOn: Binding(get: { model.awake.enabled }, set: { v in model.updateAwake { $0.enabled = v } }))
+            HStack(spacing: 8) {
+                Text("From").font(TypeScale.body).foregroundStyle(Ink.muted)
+                DatePicker("", selection: time(\.startMinute), displayedComponents: .hourAndMinute).labelsHidden()
+                Text("to").font(TypeScale.body).foregroundStyle(Ink.muted)
+                DatePicker("", selection: time(\.endMinute), displayedComponents: .hourAndMinute).labelsHidden()
+                Spacer()
+            }
+            .disabled(!model.awake.enabled)
+            Text("Every day. The same start and end keep it awake all day.")
+                .font(TypeScale.meta).foregroundStyle(Ink.faint)
+            line("Keep the screen on too", isOn: Binding(get: { model.awake.keepScreenOn }, set: { v in model.updateAwake { $0.keepScreenOn = v } }))
+                .disabled(!model.awake.enabled)
+            if let status = model.awakeStatus {
+                Text(status).font(TypeScale.meta).foregroundStyle(model.keepingAwake ? Ink.tone(.positive) : Ink.muted)
+            }
+        }
+    }
+
+    private func line(_ label: String, isOn: Binding<Bool>) -> some View {
+        HStack {
+            Text(label).font(TypeScale.body).foregroundStyle(Ink.text)
+            Spacer()
+            Toggle("", isOn: isOn).toggleStyle(.switch).controlSize(.small).labelsHidden()
+        }
+    }
+
+    /// A time of day for the picker, stored as minutes after midnight.
+    private func time(_ key: WritableKeyPath<AwakeSchedule, Int>) -> Binding<Date> {
+        Binding(
+            get: { Calendar.current.date(byAdding: .minute, value: model.awake[keyPath: key], to: Calendar.current.startOfDay(for: Date())) ?? Date() },
+            set: { date in
+                let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+                model.updateAwake { $0[keyPath: key] = (parts.hour ?? 0) * 60 + (parts.minute ?? 0) }
+            })
     }
 }

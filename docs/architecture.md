@@ -108,6 +108,7 @@ logs/launch.log       one line per launch decision, no arguments
 backups/              editor settings before each edit
 usage/                captured limits and the statusline chain
 limit-resumes.json    chats stopped by a limit: room since, resumed or why not (one week)
+awake.json            when to keep the Mac awake (off unless turned on)
 tmp/                  short-lived Terminal scripts for login
 ```
 
@@ -185,6 +186,15 @@ another one to the front on current macOS, which is why a first version failed w
 be focused"). It checks the text landed and that the box emptied. A chat not open in its window
 is opened there by its id first. A failed try is retried twice, two minutes apart; afterwards the
 transcript is checked for the message, and failures are reported. Nothing runs out of sight: the chat continues in its own panel and process, through the launcher.
+
+## Keeping the Mac awake
+
+`AwakeSchedule` (`awake.json`, off by default; anything unreadable counts as off) says between
+which times of day the Mac stays awake; the window may cross midnight, and equal times mean all
+day. The app applies it on every refresh with IOKit power assertions (`KeepAwake`): one that
+prevents idle system sleep, and one that prevents idle display sleep when "keep the screen on too"
+is set. They are held only inside the window and macOS drops them when Spillover quits; `pmset -g
+assertions` lists them under Spillover. A closed laptop lid on battery still sleeps.
 
 ## Editor and extension lifecycle
 

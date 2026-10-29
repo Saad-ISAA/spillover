@@ -66,6 +66,10 @@ final class AppModel: ObservableObject {
     /// app comes to the front, since the permission is granted outside the app).
     @Published var accessibilityAllowed = ChatSender.isAllowed
     @Published var autoPolicy = AutoPolicy()
+    /// Keep the Mac awake on a schedule (opt-in), and whether that is happening right now.
+    @Published var awake = AwakeSchedule()
+    @Published var keepingAwake = false
+    let keepAwake = KeepAwake()
     /// What each installed editor's Claude extension supports (checked after updates too).
     @Published var contracts: [Editor: ExtensionContract] = [:]
     /// Chats being moved to another account, by conversation id.
@@ -100,6 +104,7 @@ final class AppModel: ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 self.now = Date()
+                self.applyAwake()
                 self.accessibilityAllowed = ChatSender.isAllowed
                 self.refreshUsageSnapshots()
                 self.refreshSessions()
@@ -111,6 +116,28 @@ final class AppModel: ObservableObject {
                 if self.ticks % 6 == 0 { self.refreshLimits() } else { self.followSavedLimits() }
             }
         }
+    }
+
+    // MARK: Keeping the Mac awake
+
+    func updateAwake(_ change: (inout AwakeSchedule) -> Void) {
+        var schedule = awake
+        change(&schedule)
+        do {
+            try AwakeScheduleStore(env: env).save(schedule)
+            awake = schedule
+            applyAwake()
+        } catch {
+            show(.error, error.localizedDescription)
+        }
+    }
+
+    /// Takes or releases the power assertions to match the schedule (on every refresh, so the
+    /// window starts and ends within half a minute).
+    func applyAwake() {
+        let active = !DemoSessions.isActive(env) && awake.isActive(at: Date())
+        keepAwake.apply(active: active, keepScreenOn: awake.keepScreenOn)
+        keepingAwake = keepAwake.isHolding
     }
 
     // MARK: Derived
@@ -238,6 +265,8 @@ final class AppModel: ObservableObject {
         let statusline = StatuslineInstaller(env: env)
         statuslineOn = Dictionary(uniqueKeysWithValues: profiles.map { ($0.id, statusline.isInstalled(for: $0)) })
         autoPolicy = AutoPolicyStore(env: env).current()
+        awake = AwakeScheduleStore(env: env).current()
+        applyAwake()
         refreshUsageSnapshots()
         launches = LaunchLog(env: env).tail(50).reversed()
         recentFolders = RecentWorkspaces(env: env).folders(limit: 30)
