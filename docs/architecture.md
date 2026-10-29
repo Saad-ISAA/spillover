@@ -187,6 +187,23 @@ be focused"). It checks the text landed and that the box emptied. A chat not ope
 is opened there by its id first. A failed try is retried twice, two minutes apart; afterwards the
 transcript is checked for the message, and failures are reported. Nothing runs out of sight: the chat continues in its own panel and process, through the launcher.
 
+A chat keeps the account its process started on, so a message typed into a chat whose process
+still runs on the account that hit the limit would go there and hit the limit again. Before
+typing, Spillover looks the chat's process up by its conversation id; when it runs on another
+account than the one the chat should continue on, it is ended first (it is between turns), and
+the message starts it again through the launcher on that account with its history. A limit hit
+within five minutes of a resume counts as a failed try of the same stop
+(`LimitResumeLog.afterResume`), so a resume that did not take can never repeat endlessly.
+
+## Choosing an account for Auto
+
+`AutoPolicy.choose` keeps a resumed chat on the account holding it while that account is not
+full, then the folder's account (`auto-choices.json`) while that one is not full, so chats and
+windows do not switch back and forth. When a new account is needed, the one with the most room
+wins: of the accounts with room (not full, and not forecast to run out within `runOutMinutes`),
+the one whose fullest limit, session or week, is lowest. The preference order in Setup only
+breaks ties. With no account left with room, the least used one is taken.
+
 ## Keeping the Mac awake
 
 `AwakeSchedule` (`awake.json`, off by default; anything unreadable counts as off) says between

@@ -174,6 +174,32 @@ final class LimitStopsTests: XCTestCase {
         XCTAssertTrue(LimitResumeLog.isDue(fresh))
     }
 
+    func testALimitRightAfterResumingIsAFailedTryNotANewStop() {
+        // The AutoCAD chat: resumed at 20:12:08 while its process was still on the full account,
+        // back at the limit at 20:12:12. That must not start a fresh round of resumes.
+        let resumedAt = Date(timeIntervalSince1970: 1_000_000)
+        let resumed = LimitResumeLog.Entry(
+            stoppedAt: resumedAt.addingTimeInterval(-460), roomSince: resumedAt.addingTimeInterval(-240),
+            attemptedAt: resumedAt, outcome: "resumed")
+        let again = LimitResumeLog.afterResume(resumed, newStop: resumedAt.addingTimeInterval(4))
+        XCTAssertEqual(again.tries, 1)
+        XCTAssertNil(again.attemptedAt)
+        XCTAssertTrue(again.isRetrying)
+        // Each further bounce uses up a try; the last one gives up.
+        var bounce = again
+        bounce.attemptedAt = resumedAt.addingTimeInterval(200)
+        bounce.outcome = "resumed"
+        bounce.tries = LimitResumeLog.maxTries - 1
+        let last = LimitResumeLog.afterResume(bounce, newStop: resumedAt.addingTimeInterval(210))
+        XCTAssertEqual(last.tries, LimitResumeLog.maxTries)
+        XCTAssertNotNil(last.attemptedAt)
+        XCTAssertFalse(LimitResumeLog.isDue(last, now: resumedAt.addingTimeInterval(3600)))
+        // A limit hit long after a resume that took is a new stop with fresh tries.
+        let later = LimitResumeLog.afterResume(resumed, newStop: resumedAt.addingTimeInterval(3 * 3600))
+        XCTAssertNil(later.tries)
+        XCTAssertNil(LimitResumeLog.afterResume(nil, newStop: resumedAt).tries)
+    }
+
     func testResumingIsOffUntilTurnedOnAndOlderFilesLoad() throws {
         XCTAssertFalse(AutoPolicy().resumeChats)
         let box = try Sandbox()

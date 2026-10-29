@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.7 (unreleased)
+
+- Auto now picks the account with the most room, as it says: the one whose fuller limit (session
+  or week) is lowest, so an unused account is used before one near its weekly limit. The order in
+  Setup only breaks ties. A folder still keeps its account until that account reaches the
+  threshold.
+- Fixed: a chat whose process was still running on the account that hit its limit (for example
+  after its folder was assigned to another account) was sent "please resume all work" on that
+  same account, hit the limit again, and was resumed again every few minutes. Spillover now ends
+  such a chat first, so the message starts it on the account with room, and a limit hit right
+  after a resume counts as a failed try, so it can no longer repeat.
+
 ## 0.1.6 (2026-10-29)
 
 - Keep Mac awake (Setup, off until you turn it on): between the times you choose, every day, the

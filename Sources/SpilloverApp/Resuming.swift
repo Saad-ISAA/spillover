@@ -35,7 +35,7 @@ extension AppModel {
             let log = LimitResumeLog(env: env)
             let history = UsageHistory(env: env)
             var list: [StoppedChat] = []
-            var due: [LimitStop] = []
+            var due: [(stop: LimitStop, target: String)] = []
             for stop in LimitStops(env: env).scan(profiles: profiles) {
                 var target: String?
                 switch resolver.resolve(cwd: stop.cwd, preferring: stop.profileId, record: false) {
@@ -51,7 +51,7 @@ extension AppModel {
                         stop: stop, entry: entry, targetProfileId: target,
                         expected: entry.roomSince.map { $0.addingTimeInterval(LimitStops.grace) }
                             ?? LimitStops.expectedResume(snapshot)))
-                if LimitResumeLog.isDue(entry) { due.append(stop) }
+                if LimitResumeLog.isDue(entry), let target { due.append((stop, target)) }
             }
             let found = list
             let ready = due
@@ -72,13 +72,13 @@ extension AppModel {
 
     // MARK: Resuming
 
-    private func resumeStoppedChats(_ due: [LimitStop]) {
+    private func resumeStoppedChats(_ due: [(stop: LimitStop, target: String)]) {
         // Demo homes are only looked at, never typed into.
         guard !due.isEmpty, ChatSender.isAllowed, !DemoSessions.isActive(env) else { return }
         // Never type while the user is typing: due chats wait for the next quiet refresh.
         guard ChatSender.secondsSinceUserInput >= Self.resumeAfterIdleSeconds else { return }
         let log = LimitResumeLog(env: env)
-        for stop in due {
+        for (stop, target) in due {
             let name = Fmt.folderName(stop.cwd)
             guard let title = stop.title else {
                 log.recordAttempt(stop, outcome: "its chat title is not known")
@@ -86,6 +86,7 @@ extension AppModel {
                 continue
             }
             do {
+                try restartElsewhere(stop, on: target)
                 try ChatSender.send(LimitStops.message, toChat: title, conversationId: stop.conversationId, folder: stop.cwd)
                 log.recordAttempt(stop, outcome: "resumed")
                 confirmResumed(stop, title: title)
@@ -96,6 +97,35 @@ extension AppModel {
             }
         }
         checkStoppedChats()
+    }
+
+    /// A chat keeps the account its process started on: a message typed into a chat whose process
+    /// still runs on the account that hit the limit goes to that account and hits the limit again.
+    /// So when the chat's process runs on another account than the one it should continue on, it
+    /// is ended first (it is between turns, stopped by the limit); the message then starts it again
+    /// through the launcher, on that account and with its history. Chats started without an id in
+    /// their arguments cannot be matched to a process and are left as they are.
+    private func restartElsewhere(_ stop: LimitStop, on target: String) throws {
+        let running = SessionScanner(env: env).scan().filter { $0.conversationId == stop.conversationId }
+        for session in running {
+            let on = SessionScanner.profileId(for: session, profiles: profiles, caseInsensitive: env.caseInsensitivePaths)
+            guard on != target else { continue }
+            do {
+                try SessionControl.end(session)
+            } catch SessionControl.EndError.notTheSameSession {
+                continue  // it ended by itself meanwhile
+            }
+            var waited = 0
+            while SessionControl.isRunning(session.pid) && waited < 25 {
+                Thread.sleep(forTimeInterval: 0.2)
+                waited += 1
+            }
+            if SessionControl.isRunning(session.pid) {
+                try? SessionControl.end(session, force: true)
+                Thread.sleep(forTimeInterval: 1)
+            }
+            guard !SessionControl.isRunning(session.pid) else { throw ResumeFailure.stillOnOldAccount }
+        }
     }
 
     /// The message went out; the chat's transcript shows within a few seconds whether it took.
@@ -148,4 +178,14 @@ extension AppModel {
     }
 
     nonisolated static let movedMessage = "The account switched. Please resume all work."
+}
+
+enum ResumeFailure: Error, LocalizedError {
+    case stillOnOldAccount
+
+    var errorDescription: String? {
+        switch self {
+        case .stillOnOldAccount: return "its chat kept running on the account that hit the limit."
+        }
+    }
 }

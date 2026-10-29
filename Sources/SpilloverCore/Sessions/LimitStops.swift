@@ -251,8 +251,9 @@ public struct LimitResumeLog {
     @discardableResult
     public func note(_ stop: LimitStop, roomSince: Date?) -> Entry {
         var all = entries()
-        var entry = all[stop.conversationId].flatMap { abs($0.stoppedAt.timeIntervalSince(stop.stoppedAt)) < 1 ? $0 : nil }
-            ?? Entry(stoppedAt: stop.stoppedAt)
+        let previous = all[stop.conversationId]
+        var entry = previous.flatMap { abs($0.stoppedAt.timeIntervalSince(stop.stoppedAt)) < 1 ? $0 : nil }
+            ?? Self.afterResume(previous, newStop: stop.stoppedAt)
         if let roomSince {
             entry.roomSince = min(entry.roomSince ?? roomSince, roomSince)
         } else if entry.attemptedAt == nil {
@@ -262,6 +263,24 @@ public struct LimitResumeLog {
         save(all)
         return entry
     }
+
+    /// A limit hit right after Spillover resumed the chat means the resume did not take (the chat
+    /// was still on the full account, say): it counts as a failed try of the same stop, so the
+    /// tries run out instead of resuming the chat again and again.
+    static func afterResume(_ previous: Entry?, newStop: Date) -> Entry {
+        guard let previous, let resumed = previous.attemptedAt, previous.outcome == "resumed",
+            newStop >= resumed, newStop.timeIntervalSince(resumed) < Self.backAtTheLimit
+        else { return Entry(stoppedAt: newStop) }
+        var entry = Entry(stoppedAt: newStop)
+        entry.tries = (previous.tries ?? 0) + 1
+        entry.lastTryAt = resumed
+        entry.outcome = "it hit the limit again right after it was resumed"
+        if (entry.tries ?? 0) >= Self.maxTries { entry.attemptedAt = newStop }
+        return entry
+    }
+
+    /// How soon after a resume a new limit stop counts as the resume not taking.
+    public static let backAtTheLimit: TimeInterval = 300
 
     public func recordAttempt(_ stop: LimitStop, outcome: String?, at: Date = Date()) {
         var all = entries()
