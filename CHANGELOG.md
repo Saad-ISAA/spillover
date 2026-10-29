@@ -1,18 +1,16 @@
 # Changelog
 
-## 0.1.6 (unreleased)
+## 0.1.6 (2026-10-29)
 
 - Keep Mac awake (Setup, off until you turn it on): between the times you choose, every day, the
   Mac does not go to sleep, optionally with its screen on too, so Claude sessions keep running
   through the night and stopped chats can be resumed. The window may cross midnight. Overview and
   Setup say whether it is keeping the Mac awake right now and until when.
-
 - Fixed: resuming a chat after its limit reset failed with "its message box could not be focused"
   when Spillover was in the background (as it is overnight): macOS does not let a background app
   bring VS Code to the front. Spillover now types into the chat without bringing anything to the
   front, so it works while you use other apps or are away, and never takes the screen from you.
   A failed try is retried twice, two minutes apart, and the Overview shows "Retrying".
-
 - The Accessibility permission for resuming chats is checked again every 30 seconds and whenever
   Spillover comes to the front, so its warning clears without a restart, and it explains that
   after an update macOS may need Spillover removed from the Accessibility list and allowed again.
