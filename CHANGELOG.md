@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.7 (unreleased)
+## 0.1.7 (2026-10-29)
 
 - Auto now picks the account with the most room, as it says: the one whose fuller limit (session
   or week) is lowest, so an unused account is used before one near its weekly limit. The order in
